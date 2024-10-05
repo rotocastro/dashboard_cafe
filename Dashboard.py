@@ -66,7 +66,7 @@ safras_selecionadas = st.sidebar.multiselect(
 mostrar_tabela = st.sidebar.checkbox("Exibir tabela de resultados")
 incluir_estimativas = st.sidebar.checkbox("Incluir Estimativas", value=True)
 if clients != "Todos" and clients in client_info:
-    if st.sidebar.button("Exibir detalhes"):
+    if st.sidebar.button("Cadastro clientes"):
         st.session_state.mostrar_detalhes_cliente = not st.session_state.mostrar_detalhes_cliente
 
 # Aplicando filtros
@@ -92,7 +92,7 @@ if st.session_state.mostrar_detalhes_cliente and clients != "Todos" and clients 
         st.write(f"**Produto de interesse:** {client_info[clients]['Produto de Interesse']}")
 
     with col2:
-        st.subheader("Informações Financeiras 2023")
+        st.subheader("Infos. Financeiras 2023")
         st.write(f"**Receita:** {client_info[clients]['Financeiro'][2023]['Receita']}")
         st.write(f"**Lucro Líquido:** {client_info[clients]['Financeiro'][2023]['Lucro Líquido']}")
         st.write(f"**Margem Ebitda:** {client_info[clients]['Financeiro'][2023]['Margem Ebitda']}")
@@ -101,7 +101,7 @@ if st.session_state.mostrar_detalhes_cliente and clients != "Todos" and clients 
 
 
     with col3:
-        st.subheader("Informações Financeiras 2022")
+        st.subheader("Infos. Financeiras 2022")
         st.write(f"**Receita:** {client_info[clients]['Financeiro'][2022]['Receita']}")
         st.write(f"**Lucro Líquido:** {client_info[clients]['Financeiro'][2022]['Lucro Líquido']}")
         st.write(f"**Margem Ebitda:** {client_info[clients]['Financeiro'][2022]['Margem Ebitda']}")
@@ -125,7 +125,8 @@ col1, col2 = st.columns(2)
 col3, col4 = st.columns(2)
 
 # Gráfico de volume de sacas vendidas
-fig_volume = px.bar(df_monthly, x="Month_Year", y="# sacas", title="Sacas vendidas")
+total_sacas = df_monthly['# sacas'].sum()
+fig_volume = px.bar(df_monthly, x="Month_Year", y="# sacas", title=f"Sacas vendidas (Total: {total_sacas:,.0f})")
 fig_volume.update_layout(xaxis_title="Data", yaxis_title="Sacas vendidas")
 col1.plotly_chart(fig_volume, use_container_width=True)
 
@@ -134,20 +135,25 @@ df_pie = df_monthly.groupby("cliente")["# sacas"].sum().reset_index()
 df_pie = df_pie.sort_values("# sacas", ascending=False)
 df_pie["percentage"] = df_pie["# sacas"] / df_pie["# sacas"].sum() * 100
 
-fig_client = px.pie(df_pie, names="cliente", values="# sacas", title="Vendas por cliente")
+fig_client = px.pie(df_pie, names="cliente", values="# sacas", title=f"Vendas por cliente (Total: {total_sacas:,.0f} sacas)")
 fig_client.update_traces(textposition='inside', textinfo='percent+label')
 fig_client.update_layout(uniformtext_minsize=12, uniformtext_mode='hide')
 col2.plotly_chart(fig_client, use_container_width=True)
 
-# Gráfico de cash flow (Faturamento Mil U$)
-fig_cashflow = px.bar(df_monthly, x="Month_Year", y="Faturamento Mil R$", title="Cash Flow")
+# Gráfico de cash flow (Faturamento Mil R$)
+total_faturamento = df_monthly['Faturamento Mil R$'].sum()
+fig_cashflow = px.bar(df_monthly, x="Month_Year", y="Faturamento Mil R$", title=f"Cash Flow (Total: R$ {total_faturamento:,.2f} mil)")
 fig_cashflow.update_layout(xaxis_title="Data", yaxis_title="Faturamento (Mil R$)")
 col3.plotly_chart(fig_cashflow, use_container_width=True)
 
 # Gráfico de faturamento por cliente
-fig_revenue = px.bar(df_monthly.groupby("cliente")["Faturamento Mil R$"].sum().reset_index(),
-                     x="cliente", y="Faturamento Mil R$", title="Faturamento por cliente", color="cliente")
+df_revenue = df_monthly.groupby("cliente")["Faturamento Mil R$"].sum().reset_index()
+fig_revenue = px.bar(df_revenue, x="cliente", y="Faturamento Mil R$", title=f"Faturamento por cliente (Total: R$ {total_faturamento:,.2f} mil)", color="cliente")
 fig_revenue.update_layout(xaxis_title="Cliente", yaxis_title="Faturamento (Mil R$)")
+
+# Adicionar rótulos de valor em cada barra
+fig_revenue.update_traces(texttemplate='%{y:.2f}', textposition='outside')
+
 col4.plotly_chart(fig_revenue, use_container_width=True)
 
 # Exibindo as safras selecionadas
