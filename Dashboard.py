@@ -1,29 +1,12 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import re
+from datetime import datetime
 
 st.set_page_config(layout="wide")
 
-df = pd.read_excel("resultado_vendas.xlsx")
-
-colunas_filtradas = ['código', 'safra', 'data', 'cliente', '# sacas', 'entrega',
-                     'futuro_mais_próximo', 'diferencial', 'padrao','Fechamento (US$/sc)',
-                     'Resultado Mil USD', 'Resultado Mil BRL']
-
-df = df[colunas_filtradas]
-df = df.dropna()
-df = df.rename(columns={'Resultado Mil USD': 'Faturamento Mil U$',
-                        'Resultado Mil BRL': 'Faturamento Mil R$'})
-
-df["Date"] = pd.to_datetime(df["entrega"], format='%d/%m/%y', errors='coerce')
-df = df.sort_values("Date")
-
-# Dados de exemplo para os clientes
-
-# Inicializar o estado para exibir detalhes do cliente
-if 'mostrar_detalhes_cliente' not in st.session_state:
-    st.session_state.mostrar_detalhes_cliente = False
-
+# Definição do client_info
 client_info = {
     "AW TRADING": {
         "Nome": "AW TRADING SP. Z.O.O",
@@ -32,42 +15,70 @@ client_info = {
         "Movimentação": "500MT (est.)",
         "Produto de Interesse": "82+",
         "Financeiro": {
-            2023: {"Receita": "U$ 15.243", "Lucro Líquido": "U$ 1.051", "Margem Ebitda": "9%", "Dívida/EBITDA": "1.50", "Credit Score": 3},
-            2022: {"Receita": "U$ 10.893", "Lucro Líquido": "U$ 108", "Margem Ebitda": "-1%", "Dívida/EBITDA": "-26.3", "Credit Score": 4},
-        }},
+            2023: {"Receita": "U$ 15.243", "Lucro Líquido": "U$ 1.051", "Margem Ebitda": "9%", "Dívida/EBITDA": "1.50",
+                   "Credit Score": 3},
+            2022: {"Receita": "U$ 10.893", "Lucro Líquido": "U$ 108", "Margem Ebitda": "-1%", "Dívida/EBITDA": "-26.3",
+                   "Credit Score": 4},
+        }
+    },
     "SOUTHLAND": {
-            "Nome": "SLM Coffee Pty Ltd T/AS Southland Merchants Trust",
-            "Cidade": "Hazelwood Park SA",
-            "País": "Austrália",
-            "Movimentação": "480MT",
-            "Produto de Interesse": "82+",
-            "Financeiro": {
-                2023: {"Receita": "U$ 3.642", "Lucro Líquido": "U$ 583", "Margem Ebitda": "15%", "Dívida/EBITDA": "0.61", "Credit Score": 4},
-                2022: {"Receita": "U$ 2.713", "Lucro Líquido": "U$ 556", "Margem Ebitda": "21%", "Dívida/EBITDA": "0.67", "Credit Score": 5},
-            }},
+        "Nome": "SLM Coffee Pty Ltd T/AS Southland Merchants Trust",
+        "Cidade": "Hazelwood Park SA",
+        "País": "Austrália",
+        "Movimentação": "480MT",
+        "Produto de Interesse": "82+",
+        "Financeiro": {
+            2023: {"Receita": "U$ 3.642", "Lucro Líquido": "U$ 583", "Margem Ebitda": "15%", "Dívida/EBITDA": "0.61",
+                   "Credit Score": 4},
+            2022: {"Receita": "U$ 2.713", "Lucro Líquido": "U$ 556", "Margem Ebitda": "21%", "Dívida/EBITDA": "0.67",
+                   "Credit Score": 5},
+        }
+    },
 }
+
+
+@st.cache_data
+def load_data():
+    df = pd.read_excel("resultado_vendas_com_fluxo.xlsx")
+
+    # Identificando dinamicamente as colunas de fluxo de pagamento
+    colunas_fluxo = [col for col in df.columns if
+                     re.match(r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/\d{4}', col)]
+
+    # Convertendo datas para datetime
+    df["Date"] = pd.to_datetime(df["entrega"], format='%d/%m/%y', errors='coerce')
+
+    # Limpando dados nulos
+    df = df.dropna(subset=['cliente', 'safra'])
+    df['safra'] = df['safra'].astype(int)
+
+    return df, colunas_fluxo
+
+
+df, colunas_fluxo = load_data()
 
 # Filtros na barra lateral
 st.sidebar.header("Filtros")
 
 # Filtro de clientes
-clients_option = ["Todos"] + list(df["cliente"].unique())
+clients_option = ["Todos"] + sorted(df["cliente"].unique().tolist())
 clients = st.sidebar.selectbox("Cliente", clients_option)
 
 # Seletor múltiplo para safras
-safras_disponiveis = [2023, 2024]
+safras_disponiveis = sorted(df["safra"].unique())
 safras_selecionadas = st.sidebar.multiselect(
     "Escolha as safras",
     options=safras_disponiveis,
     default=safras_disponiveis
 )
 
-# Checkboxs
+# Checkboxes
 mostrar_tabela = st.sidebar.checkbox("Exibir tabela de resultados")
 incluir_estimativas = st.sidebar.checkbox("Incluir Estimativas", value=True)
+
+# Botão para exibir detalhes do cliente
 if clients != "Todos" and clients in client_info:
-    if st.sidebar.button("Cadastro clientes"):
-        st.session_state.mostrar_detalhes_cliente = not st.session_state.mostrar_detalhes_cliente
+    mostrar_detalhes_cliente = st.sidebar.button("Mostrar Detalhes do Cliente")
 
 # Aplicando filtros
 df_filtered = df[df['safra'].isin(safras_selecionadas)]
@@ -78,83 +89,78 @@ if clients != "Todos":
 if not incluir_estimativas:
     df_filtered = df_filtered[df_filtered["cliente"] != "ESTIMATIVA"]
 
-# Exibição dos detalhes do cliente (no início)
-if st.session_state.mostrar_detalhes_cliente and clients != "Todos" and clients in client_info:
+# Layout do dashboard
+st.title("Painel de Vendas de Café")
+
+# Exibição dos detalhes do cliente
+if clients != "Todos" and clients in client_info and mostrar_detalhes_cliente:
     st.header(f"Detalhes de {clients}")
     col1, col2, col3 = st.columns(3)
 
     with col1:
         st.subheader("Informações Gerais")
-        st.write(f"**Nome:** {clients}")
-        st.write(f"**Cidade:** {client_info[clients]['Cidade']}")
-        st.write(f"**País:** {client_info[clients]['País']}")
-        st.write(f"**Movimentação:** {client_info[clients]['Movimentação']}")
-        st.write(f"**Produto de interesse:** {client_info[clients]['Produto de Interesse']}")
+        for key, value in client_info[clients].items():
+            if key != "Financeiro":
+                st.write(f"**{key}:** {value}")
 
     with col2:
         st.subheader("Infos. Financeiras 2023")
-        st.write(f"**Receita:** {client_info[clients]['Financeiro'][2023]['Receita']}")
-        st.write(f"**Lucro Líquido:** {client_info[clients]['Financeiro'][2023]['Lucro Líquido']}")
-        st.write(f"**Margem Ebitda:** {client_info[clients]['Financeiro'][2023]['Margem Ebitda']}")
-        st.write(f"**Dívida/Ebitda:** {client_info[clients]['Financeiro'][2023]['Dívida/EBITDA']}")
-        st.write(f"**Credit Score:** {client_info[clients]['Financeiro'][2023]['Credit Score']}")
-
+        for key, value in client_info[clients]["Financeiro"][2023].items():
+            st.write(f"**{key}:** {value}")
 
     with col3:
         st.subheader("Infos. Financeiras 2022")
-        st.write(f"**Receita:** {client_info[clients]['Financeiro'][2022]['Receita']}")
-        st.write(f"**Lucro Líquido:** {client_info[clients]['Financeiro'][2022]['Lucro Líquido']}")
-        st.write(f"**Margem Ebitda:** {client_info[clients]['Financeiro'][2022]['Margem Ebitda']}")
-        st.write(f"**Dívida/Ebitda:** {client_info[clients]['Financeiro'][2022]['Dívida/EBITDA']}")
-        st.write(f"**Credit Score:** {client_info[clients]['Financeiro'][2022]['Credit Score']}")
+        for key, value in client_info[clients]["Financeiro"][2022].items():
+            st.write(f"**{key}:** {value}")
 
-    st.markdown("---")  # Adiciona uma linha horizontal para separar os detalhes dos gráficos
+    st.markdown("---")
 
-# Agregação por mês/ano
-df_filtered['Month_Year'] = df_filtered['Date'].dt.to_period('M')
-df_monthly = df_filtered.groupby(['Month_Year', 'cliente']).agg({
-    '# sacas': 'sum',
-    'Faturamento Mil R$': 'sum'
-}).reset_index()
-
-df_monthly['Month_Year'] = df_monthly['Month_Year'].astype(str)
-
-# Exibição dos gráficos
-st.header("Painel de Vendas")
 col1, col2 = st.columns(2)
 col3, col4 = st.columns(2)
 
 # Gráfico de volume de sacas vendidas
-total_sacas = df_monthly['# sacas'].sum()
-fig_volume = px.bar(df_monthly, x="Month_Year", y="# sacas", title=f"Sacas vendidas (Total: {total_sacas:,.0f})")
-fig_volume.update_layout(xaxis_title="Data", yaxis_title="Sacas vendidas")
-col1.plotly_chart(fig_volume, use_container_width=True)
+with col1:
+    df_volume = df_filtered.groupby(df_filtered['Date'].dt.to_period('M')).agg({'# sacas': 'sum'}).reset_index()
+    df_volume['Date'] = df_volume['Date'].dt.strftime('%Y-%m')
+    total_sacas = df_volume['# sacas'].sum()
+    fig_volume = px.bar(df_volume, x="Date", y="# sacas", title=f"Sacas vendidas (Total: {total_sacas:,.0f})")
+    fig_volume.update_layout(xaxis_title="Data", yaxis_title="Sacas vendidas")
+    st.plotly_chart(fig_volume, use_container_width=True)
 
-# Gráfico de vendas por cliente (pizza)
-df_pie = df_monthly.groupby("cliente")["# sacas"].sum().reset_index()
-df_pie = df_pie.sort_values("# sacas", ascending=False)
-df_pie["percentage"] = df_pie["# sacas"] / df_pie["# sacas"].sum() * 100
+# Gráfico de vendas por safra
+with col2:
+    df_safra = df_filtered.groupby("safra")["# sacas"].sum().reset_index()
+    df_safra["# sacas"] = df_safra["# sacas"].astype(int)
+    fig_safra = px.pie(df_safra, names="safra", values="# sacas",
+                       title=f"Vendas por safra (Total: {total_sacas:,.0f} sacas)")
+    fig_safra.update_traces(textposition='inside', textinfo='percent+label+value')
+    fig_safra.update_layout(uniformtext_minsize=12, uniformtext_mode='hide')
+    st.plotly_chart(fig_safra, use_container_width=True)
 
-fig_client = px.pie(df_pie, names="cliente", values="# sacas", title=f"Vendas por cliente (Total: {total_sacas:,.0f} sacas)")
-fig_client.update_traces(textposition='inside', textinfo='percent+label')
-fig_client.update_layout(uniformtext_minsize=12, uniformtext_mode='hide')
-col2.plotly_chart(fig_client, use_container_width=True)
-
-# Gráfico de cash flow (Faturamento Mil R$)
-total_faturamento = df_monthly['Faturamento Mil R$'].sum()
-fig_cashflow = px.bar(df_monthly, x="Month_Year", y="Faturamento Mil R$", title=f"Cash Flow (Total: R$ {total_faturamento:,.2f} mil)")
-fig_cashflow.update_layout(xaxis_title="Data", yaxis_title="Faturamento (Mil R$)")
-col3.plotly_chart(fig_cashflow, use_container_width=True)
+# Gráfico de cash flow
+with col3:
+    df_fluxo = df_filtered[colunas_fluxo].melt(var_name='Month', value_name='Payment')
+    df_fluxo['Month'] = pd.to_datetime(df_fluxo['Month'], format='%b/%Y')
+    df_fluxo = df_fluxo.groupby('Month')['Payment'].sum().reset_index()
+    total_pagamentos = df_fluxo['Payment'].sum()
+    fig_cashflow = px.bar(df_fluxo, x="Month", y="Payment", title=f"Cash Flow (Total: R$ {total_pagamentos:,.2f})")
+    fig_cashflow.update_layout(xaxis_title="Data", yaxis_title="Pagamento (R$)")
+    st.plotly_chart(fig_cashflow, use_container_width=True)
 
 # Gráfico de faturamento por cliente
-df_revenue = df_monthly.groupby("cliente")["Faturamento Mil R$"].sum().reset_index()
-fig_revenue = px.bar(df_revenue, x="cliente", y="Faturamento Mil R$", title=f"Faturamento por cliente (Total: R$ {total_faturamento:,.2f} mil)", color="cliente")
-fig_revenue.update_layout(xaxis_title="Cliente", yaxis_title="Faturamento (Mil R$)")
+with col4:
+    df_revenue = df_filtered.groupby("cliente")[colunas_fluxo].sum().sum(axis=1).reset_index(name="Faturamento")
+    fig_revenue = px.bar(df_revenue, x="cliente", y="Faturamento",
+                         title=f"Faturamento por cliente (Total: R$ {total_pagamentos:,.2f})",
+                         color="cliente")
+    fig_revenue.update_layout(xaxis_title="Cliente", yaxis_title="Faturamento (R$)")
+    fig_revenue.update_traces(texttemplate='%{y:.2f}', textposition='outside')
+    st.plotly_chart(fig_revenue, use_container_width=True)
 
-# Adicionar rótulos de valor em cada barra
-fig_revenue.update_traces(texttemplate='%{y:.2f}', textposition='outside')
-
-col4.plotly_chart(fig_revenue, use_container_width=True)
+# Exibição da tabela de resultados
+if mostrar_tabela:
+    st.subheader("Tabela de Resultados")
+    st.dataframe(df_filtered)
 
 # Exibindo as safras selecionadas
 st.sidebar.write(f"Safras selecionadas: {', '.join(map(str, safras_selecionadas))}")
