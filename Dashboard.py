@@ -103,11 +103,19 @@ df, colunas_fluxo = load_data()
 st.sidebar.image("https://via.placeholder.com/150x50.png?text=Coffee+Sales", use_column_width=True)
 st.sidebar.title("Filtros")
 
+# Checkbox para incluir estimativas
+incluir_estimativas = st.sidebar.checkbox("📈 Incluir Estimativas", value=True)
+
+# Lista de clientes filtrada baseada na escolha de incluir estimativas
+clientes_disponiveis = df["cliente"].unique().tolist()
+if not incluir_estimativas:
+    clientes_disponiveis = [c for c in clientes_disponiveis if c != "ESTIMATIVA"]
+
 # Multi-select para clientes
 clients = st.sidebar.multiselect(
     "Selecione os Clientes",
-    options=sorted(df["cliente"].unique()),
-    default=sorted(df["cliente"].unique()),
+    options=sorted(clientes_disponiveis),
+    default=sorted(clientes_disponiveis),
     help="Selecione um ou mais clientes para filtrar os dados"
 )
 
@@ -127,21 +135,14 @@ safras_selecionadas = st.sidebar.multiselect(
     help="Selecione as safras que deseja visualizar"
 )
 
-# Checkboxes com ícones
-col1_sidebar, col2_sidebar = st.sidebar.columns(2)
-with col1_sidebar:
-    mostrar_tabela = st.checkbox("📊 Exibir tabela", value=False)
-with col2_sidebar:
-    incluir_estimativas = st.checkbox("📈 Incluir Estimativas", value=True)
+# Checkbox para tabela
+mostrar_tabela = st.sidebar.checkbox("📊 Exibir tabela", value=False)
 
 # Aplicando filtros
 df_filtered = df[
     (df['safra'].isin(safras_selecionadas)) &
     (df['cliente'].isin(clients))
-    ]
-
-if not incluir_estimativas:
-    df_filtered = df_filtered[df_filtered["cliente"] != "ESTIMATIVA"]
+]
 
 # Header principal com métricas
 st.title("☕ Dashboard de Vendas de Café")
