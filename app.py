@@ -20,7 +20,7 @@ st.markdown("""
 
 @st.cache_data
 def load_data():
-    return pd.read_excel("/Users/rotocastro/Desktop/vendas_cafe.xlsx")
+    return pd.read_excel("vendas_cafe.xlsx")
 
 
 df = load_data()
