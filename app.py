@@ -15,10 +15,39 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# Definição do client_info
+client_info = {
+ "Unroasted": {
+ "Nome": "AW TRADING SP. Z.O.O",
+ "Cidade": "Varsóvia",
+ "País": "Polônia",
+ "Movimentação": "500MT (est.)",
+ "Produto de Interesse": "82+",
+ "Financeiro": {
+ 2023: {"Receita": "U$ 15.243", "Lucro Líquido": "U$ 1.051", "Margem Ebitda": "9%", "Dívida/EBITDA": "1.50",
+ "Credit Score": 3},
+ 2022: {"Receita": "U$ 10.893", "Lucro Líquido": "U$ 108", "Margem Ebitda": "-1%", "Dívida/EBITDA": "-26.3",
+ "Credit Score": 4},
+ }
+ },
+ "Southland": {
+ "Nome": "SLM Coffee Pty Ltd T/AS Southland Merchants Trust",
+ "Cidade": "Hazelwood Park SA",
+ "País": "Austrália",
+ "Movimentação": "480MT",
+ "Produto de Interesse": "82+",
+ "Financeiro": {
+ 2023: {"Receita": "U$ 3.642", "Lucro Líquido": "U$ 583", "Margem Ebitda": "15%", "Dívida/EBITDA": "0.61",
+ "Credit Score": 4},
+ 2022: {"Receita": "U$ 2.713", "Lucro Líquido": "U$ 556", "Margem Ebitda": "21%", "Dívida/EBITDA": "0.67",
+ "Credit Score": 5},
+ }
+ },
+}
+
 @st.cache_data
 def load_data():
     return pd.read_excel("vendas_cafe.xlsx")
-
 
 df = load_data()
 
@@ -34,6 +63,40 @@ safras = st.sidebar.multiselect("Safras",
 clientes = st.sidebar.multiselect("Clientes",
                                   options=sorted(df['Cliente'].unique()),
                                   default=sorted(df['Cliente'].unique()))
+
+selected_clients_in_info = [cliente for cliente in clientes if cliente in client_info]
+if selected_clients_in_info:
+    mostrar_detalhes_cliente = st.sidebar.button("👥 Mostrar Detalhes dos Clientes")
+
+    if mostrar_detalhes_cliente:
+        st.sidebar.markdown("### Detalhes dos Clientes Selecionados")
+        for cliente in selected_clients_in_info:
+            info = client_info[cliente]
+            with st.sidebar.expander(f"📊 {info['Nome']}", expanded=True):
+                st.markdown(f"""
+                    #### Informações Gerais
+                    - 🏢 **Cidade:** {info['Cidade']}
+                    - 🌍 **País:** {info['País']}
+                    - 📦 **Movimentação:** {info['Movimentação']}
+                    - 🎯 **Produto de Interesse:** {info['Produto de Interesse']}
+
+                    #### Dados Financeiros
+                    """)
+
+                # Criar tabs para os anos
+                anos = list(info['Financeiro'].keys())
+                tabs_anos = st.tabs([str(ano) for ano in anos])
+
+                for tab, ano in zip(tabs_anos, anos):
+                    with tab:
+                        fin_data = info['Financeiro'][ano]
+                        st.markdown(f"""
+                            - 💰 **Receita:** {fin_data['Receita']}
+                            - 📈 **Lucro Líquido:** {fin_data['Lucro Líquido']}
+                            - 📊 **Margem EBITDA:** {fin_data['Margem Ebitda']}
+                            - 💵 **Dívida/EBITDA:** {fin_data['Dívida/EBITDA']}
+                            - ⭐ **Credit Score:** {fin_data['Credit Score']}
+                        """)
 
 peneiras = st.sidebar.multiselect("Peneiras",
                                   options=sorted([str(p) for p in df['peneira'].unique() if pd.notna(p)]),
@@ -51,7 +114,6 @@ if not incluir_estimativas:
     mask &= df['Cliente'] != "Estimativa"
 df_filtered = df[mask]
 
-
 def display_metrics(data):
     cols = st.columns(3)
     with cols[0]:
@@ -63,7 +125,6 @@ def display_metrics(data):
     with cols[2]:
         avg_price = total_revenue / total_sacas if total_sacas > 0 else 0
         st.metric("Valor médio da saca", f"U$ {avg_price:.2f}/sc")
-
 
 def create_volume_chart(data, dimension):
     if dimension == 'peneira':
@@ -79,7 +140,6 @@ def create_volume_chart(data, dimension):
                  color=dimension)
     fig.update_layout(showlegend=False)
     return fig
-
 
 def create_price_chart(data, dimension):
     if dimension == 'peneira':
@@ -101,7 +161,6 @@ def create_price_chart(data, dimension):
     fig.update_layout(showlegend=False)
     return fig
 
-
 def create_revenue_chart(data, dimension):
     if dimension == 'peneira':
         data = data.copy()
@@ -116,7 +175,6 @@ def create_revenue_chart(data, dimension):
                  color=dimension)
     fig.update_layout(showlegend=False)
     return fig
-
 
 def create_cashflow_chart(data):
     print("Colunas disponíveis:", data.columns.tolist())  # Debug
