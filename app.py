@@ -176,6 +176,20 @@ def create_revenue_chart(data, dimension):
     fig.update_layout(showlegend=False)
     return fig
 
+def create_pie_chart(data, dimension):
+    pie_data = data.groupby(dimension)['# Sacas'].sum().reset_index()
+    total = pie_data['# Sacas'].sum()
+    pie_data['Percentual'] = (pie_data['# Sacas'] / total * 100).round(1)
+
+    fig = px.pie(pie_data,
+                 values='# Sacas',
+                 names=dimension,
+                 title=f"Participação por {dimension} (%)",
+                 hover_data=['Percentual'],
+                 labels={'# Sacas': 'Sacas'})
+    fig.update_traces(textposition='inside', textinfo='percent')
+    return fig
+
 def create_cashflow_chart(data):
     print("Colunas disponíveis:", data.columns.tolist())  # Debug
     month_columns = ['Sep-24', 'Oct-24', 'Nov-24', 'Dec-24',
@@ -224,23 +238,25 @@ with tab1:
     with col1:
         st.plotly_chart(create_volume_chart(df_filtered, 'Cliente'), key="vol_1", use_container_width=True)
     with col2:
-        st.plotly_chart(create_price_chart(df_filtered, 'Cliente'), key="price_1", use_container_width=True)
-
+        st.plotly_chart(create_pie_chart(df_filtered, 'Cliente'), key="pie_1", use_container_width=True)
     col3, col4 = st.columns(2)
     with col3:
         st.plotly_chart(create_revenue_chart(df_filtered, 'Cliente'), key="rev_1", use_container_width=True)
+    with col4:
+        st.plotly_chart(create_price_chart(df_filtered, 'Cliente'), key="price_1", use_container_width=True)
 
 with tab2:
-    display_metrics(df_filtered)
     col1, col2 = st.columns(2)
     with col1:
         st.plotly_chart(create_volume_chart(df_filtered, 'Cliente'), key="vol_2", use_container_width=True)
     with col2:
-        st.plotly_chart(create_price_chart(df_filtered, 'Cliente'), key="price_2", use_container_width=True)
+        st.plotly_chart(create_pie_chart(df_filtered, 'Cliente'), key="pie_2", use_container_width=True)
 
     col3, col4 = st.columns(2)
     with col3:
         st.plotly_chart(create_revenue_chart(df_filtered, 'Cliente'), key="rev_2", use_container_width=True)
+    with col4:
+        st.plotly_chart(create_price_chart(df_filtered, 'Cliente'), key="price_2", use_container_width=True)
 
 with tab3:
     display_metrics(df_filtered)
@@ -248,11 +264,13 @@ with tab3:
     with col1:
         st.plotly_chart(create_volume_chart(df_filtered, 'peneira'), key="vol_3", use_container_width=True)
     with col2:
-        st.plotly_chart(create_price_chart(df_filtered, 'peneira'), key="price_3", use_container_width=True)
+        st.plotly_chart(create_pie_chart(df_filtered, 'peneira'), key="pie_3", use_container_width=True)
 
     col3, col4 = st.columns(2)
     with col3:
         st.plotly_chart(create_revenue_chart(df_filtered, 'peneira'), key="rev_3", use_container_width=True)
+    with col4:
+        st.plotly_chart(create_price_chart(df_filtered, 'peneira'), key="price_3", use_container_width=True)
 
 with tab4:
     display_metrics(df_filtered)
@@ -260,11 +278,14 @@ with tab4:
     with col1:
         st.plotly_chart(create_volume_chart(df_filtered, 'qualidade'), key="vol_4", use_container_width=True)
     with col2:
-        st.plotly_chart(create_price_chart(df_filtered, 'qualidade'), key="price_4", use_container_width=True)
+        st.plotly_chart(create_pie_chart(df_filtered, 'qualidade'), key="pie_4", use_container_width=True)
 
     col3, col4 = st.columns(2)
     with col3:
         st.plotly_chart(create_revenue_chart(df_filtered, 'qualidade'), key="rev_4", use_container_width=True)
+    with col4:
+        st.plotly_chart(create_price_chart(df_filtered, 'qualidade'), key="price_4", use_container_width=True)
+
 
 if st.sidebar.checkbox("📋 Exibir tabela de dados"):
     st.dataframe(df_filtered)
