@@ -53,6 +53,21 @@ def load_data():
 
 df = load_data()
 
+# Mover este bloco para logo após carregar o DataFrame (depois de df = load_data())
+peneiras = sorted(list(df['peneira'].astype(str).unique()))
+clientes = sorted(list(df['Cliente'].unique()))
+qualidades = sorted(list(df['qualidade'].unique()))
+
+
+COLORS_PENEIRAS = (px.colors.qualitative.Prism + px.colors.qualitative.Safe)[:len(peneiras)]
+COLORS_CLIENTES = px.colors.qualitative.Vivid[:len(clientes)]
+COLORS_QUALIDADES = px.colors.qualitative.D3[:len(qualidades)]
+
+COLOR_MAP = {
+    **dict(zip(peneiras, COLORS_PENEIRAS)),
+    **dict(zip(clientes, COLORS_CLIENTES)),
+    **dict(zip(qualidades, COLORS_QUALIDADES))}
+
 st.title("☕ Dashboard de Vendas de Café")
 
 st.sidebar.title("Filtros")
@@ -128,6 +143,7 @@ def display_metrics(data):
         avg_price = total_revenue / total_sacas if total_sacas > 0 else 0
         st.metric("Valor médio da saca", f"U$ {avg_price:.2f}/sc")
 
+
 def create_volume_chart(data, dimension):
 
     volume_data = data.groupby(dimension)['# Sacas'].sum().sort_values(ascending=True).reset_index()
@@ -136,7 +152,8 @@ def create_volume_chart(data, dimension):
                  y=dimension,
                  title=f"Sacas Vendidas por {dimension}",
                  orientation='h',
-                 color=dimension)
+                 color=dimension,
+                 color_discrete_map=COLOR_MAP)
     fig.update_layout(showlegend=False)
     return fig
 
@@ -155,7 +172,8 @@ def create_price_chart(data, dimension):
                      title=f"Valor médio da saca (U$/sc) por {dimension}",
                      size='# Sacas',
                      color=dimension,
-                     size_max=60)
+                     size_max=60,
+                     color_discrete_map=COLOR_MAP)
     fig.update_traces(marker=dict(opacity=0.8))
     fig.update_layout(showlegend=False)
     return fig
@@ -168,7 +186,8 @@ def create_revenue_chart(data, dimension):
                  y=dimension,
                  title=f"Faturamento Total por {dimension}",
                  orientation='h',
-                 color=dimension)
+                 color=dimension,
+                 color_discrete_map=COLOR_MAP)
     fig.update_layout(showlegend=False)
     return fig
 
@@ -177,50 +196,54 @@ def create_pie_chart(data, dimension):
     total = pie_data['# Sacas'].sum()
     pie_data['Percentual'] = (pie_data['# Sacas'] / total * 100).round(0)
 
+    colors_in_order = [COLOR_MAP[cat] for cat in pie_data[dimension]]
+
     fig = px.pie(pie_data,
                  values='# Sacas',
                  names=dimension,
                  title=f"Participação por {dimension} (%)",
                  hover_data=['Percentual'],
-                 labels={'# Sacas': 'Sacas'})
+                 labels={'# Sacas': 'Sacas'},
+                 color=dimension,
+                 color_discrete_sequence=colors_in_order)
     fig.update_traces(textposition='inside', textinfo='percent')
     return fig
 
-def create_cashflow_chart(data):
-    print("Colunas disponíveis:", data.columns.tolist())  # Debug
-    month_columns = ['Sep-24', 'Oct-24', 'Nov-24', 'Dec-24',
-                     'Jan-25', 'Feb-25', 'Mar-25', 'Apr-25', 'May-25']
-
-    cashflow_data = []
-    for cliente in data['Cliente'].unique():
-        for month in month_columns:
-            if month in data.columns:
-                valor = data[data['Cliente'] == cliente][month].sum()
-                if valor != 0:
-                    cashflow_data.append({
-                        'Mes': month,
-                        'Cliente': cliente,
-                        'Valor': valor
-                    })
-
-    if not cashflow_data:
-        return None
-
-    monthly_data = pd.DataFrame(cashflow_data)
-    fig = px.bar(monthly_data,
-                 x='Mes',
-                 y='Valor',
-                 color='Cliente',
-                 title="Fluxo de Caixa Mensal por Cliente",
-                 barmode='stack')
-
-    fig.update_layout(
-        xaxis_title="Mês",
-        yaxis_title="Valor (U$)",
-        showlegend=True,
-        bargap=0.2
-    )
-    return fig
+# def create_cashflow_chart(data):
+#     print("Colunas disponíveis:", data.columns.tolist())  # Debug
+#     month_columns = ['Sep-24', 'Oct-24', 'Nov-24', 'Dec-24',
+#                      'Jan-25', 'Feb-25', 'Mar-25', 'Apr-25', 'May-25']
+#
+#     cashflow_data = []
+#     for cliente in data['Cliente'].unique():
+#         for month in month_columns:
+#             if month in data.columns:
+#                 valor = data[data['Cliente'] == cliente][month].sum()
+#                 if valor != 0:
+#                     cashflow_data.append({
+#                         'Mes': month,
+#                         'Cliente': cliente,
+#                         'Valor': valor
+#                     })
+#
+#     if not cashflow_data:
+#         return None
+#
+#     monthly_data = pd.DataFrame(cashflow_data)
+#     fig = px.bar(monthly_data,
+#                  x='Mes',
+#                  y='Valor',
+#                  color='Cliente',
+#                  title="Fluxo de Caixa Mensal por Cliente",
+#                  barmode='stack')
+#
+#     fig.update_layout(
+#         xaxis_title="Mês",
+#         yaxis_title="Valor (U$)",
+#         showlegend=True,
+#         bargap=0.2
+#     )
+#     return fig
 
 
 tab1, tab2, tab3, tab4 = st.tabs(['📊 Consolidado', '👥 Por Cliente', '📏 Por Peneira', '✨ Por Qualidade'])
