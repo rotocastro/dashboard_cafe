@@ -47,7 +47,9 @@ client_info = {
 
 @st.cache_data
 def load_data():
-    return pd.read_excel("vendas_cafe.xlsx")
+    df = pd.read_excel("vendas_cafe.xlsx")
+    df["peneira"] = df["peneira"].astype(str)
+    return df
 
 df = load_data()
 
@@ -121,15 +123,12 @@ def display_metrics(data):
         st.metric("Total de Sacas", f"{total_sacas:,}")
     with cols[1]:
         total_revenue = data['Resultado U$'].sum()
-        st.metric("Faturamento Total", f"U$ {total_revenue:,.2f}")
+        st.metric("Faturamento Total", f"U$ {total_revenue:,.0f}")
     with cols[2]:
         avg_price = total_revenue / total_sacas if total_sacas > 0 else 0
         st.metric("Valor médio da saca", f"U$ {avg_price:.2f}/sc")
 
 def create_volume_chart(data, dimension):
-    if dimension == 'peneira':
-        data = data.copy()
-        data['peneira'] = data['peneira'].astype(str)
 
     volume_data = data.groupby(dimension)['# Sacas'].sum().sort_values(ascending=True).reset_index()
     fig = px.bar(volume_data,
@@ -142,29 +141,26 @@ def create_volume_chart(data, dimension):
     return fig
 
 def create_price_chart(data, dimension):
-    if dimension == 'peneira':
-        data = data.copy()
-        data['peneira'] = data['peneira'].astype(str)
 
     price_data = data.groupby(dimension).agg({
         '# Sacas': 'sum',
         'Resultado U$': 'sum'
     }).reset_index()
     price_data['Preço Médio'] = price_data['Resultado U$'] / price_data['# Sacas']
+    price_data['Preço Médio'] = price_data['Preço Médio'].round(2)
 
     fig = px.scatter(price_data,
                      x=dimension,
                      y='Preço Médio',
                      title=f"Valor médio da saca (U$/sc) por {dimension}",
                      size='# Sacas',
-                     color=dimension)
+                     color=dimension,
+                     size_max=60)
+    fig.update_traces(marker=dict(opacity=0.8))
     fig.update_layout(showlegend=False)
     return fig
 
 def create_revenue_chart(data, dimension):
-    if dimension == 'peneira':
-        data = data.copy()
-        data['peneira'] = data['peneira'].astype(str)
 
     revenue_data = data.groupby(dimension)['Resultado U$'].sum().sort_values(ascending=True).reset_index()
     fig = px.bar(revenue_data,
@@ -179,7 +175,7 @@ def create_revenue_chart(data, dimension):
 def create_pie_chart(data, dimension):
     pie_data = data.groupby(dimension)['# Sacas'].sum().reset_index()
     total = pie_data['# Sacas'].sum()
-    pie_data['Percentual'] = (pie_data['# Sacas'] / total * 100).round(1)
+    pie_data['Percentual'] = (pie_data['# Sacas'] / total * 100).round(0)
 
     fig = px.pie(pie_data,
                  values='# Sacas',
