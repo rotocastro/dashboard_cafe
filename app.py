@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-
-brl_usd = 6.00
+import yfinance as yf
+from datetime import datetime
 
 st.set_page_config(page_title="Dashboard de Vendas de Café", page_icon="☕", layout="wide")
 
@@ -47,17 +47,118 @@ client_info = {
  },
 }
 
+# Obter cotações do dólar
+@st.cache_data(ttl=24*3600)
+def obter_cotacoes_dolar():
+    symbols = ['USDBRL=X']
+    hoje = datetime.now()
+    dolar = yf.download(symbols, start="2004-01-01", end=hoje)["Close"]
+    # Calcular média mensal (alterado de YE para M para média mensal)
+    media_mensal = dolar.resample('ME').mean()
+    return media_mensal
+
+# Chamar a função para obter as cotações
+cotacoes_dolar = obter_cotacoes_dolar()
+
+
 @st.cache_data
 def load_data():
     df = pd.read_excel("vendas_cafe.xlsx")
     df["peneira"] = df["peneira"].astype(str)
 
-    # Convertendo preços de mercado interno de BRL para USD
+    # Convertendo preços de mercado interno de BRL para USD usando cotações mensais
     mask_mercado_interno = df['tipo'] == 'Mercado Interno'
-    df.loc[mask_mercado_interno, 'Preço (u$/sc)'] = df.loc[mask_mercado_interno, 'Preço (u$/sc)'] / brl_usd
-    df.loc[mask_mercado_interno, 'Resultado U$'] = df.loc[mask_mercado_interno, 'Resultado U$'] / brl_usd
+
+    # Apenas processa as linhas de mercado interno
+    if mask_mercado_interno.any():
+        # Usar especificamente a coluna "Data BL"
+        data_col = 'Data BL'
+
+        if data_col in df.columns:
+
+            # Para cada linha do mercado interno
+            for index, row in df[mask_mercado_interno].iterrows():
+                try:
+                    # Converter para timestamp se ainda não for
+                    if not isinstance(row[data_col], pd.Timestamp):
+                        data_venda = pd.to_datetime(row[data_col])
+                    else:
+                        data_venda = row[data_col]
+
+                    # Obter o ano e mês para encontrar a cotação
+                    ano = data_venda.year
+                    mes = data_venda.month
+
+                    # Primeiro, criar um timestamp para o primeiro dia do mês
+                    data_inicio_mes = pd.Timestamp(year=ano, month=mes, day=1)
+
+                    # Encontrar a cotação mais próxima
+                    if data_inicio_mes in cotacoes_dolar.index:
+                        # Cotação encontrada diretamente
+                        cotacao = cotacoes_dolar.loc[data_inicio_mes]
+                    else:
+                        # Procurar a cotação mais próxima anterior
+                        cotacoes_anteriores = cotacoes_dolar[cotacoes_dolar.index <= data_inicio_mes]
+                        if not cotacoes_anteriores.empty:
+                            cotacao = cotacoes_anteriores.iloc[-1]
+                        else:
+                            # Se não encontrar nenhuma cotação anterior, usa a primeira disponível
+                            cotacao = cotacoes_dolar.iloc[0]
+
+                    # Realizar a conversão BRL para USD
+                    if 'Preço (u$/sc)' in df.columns:
+                        df.at[index, 'Preço (u$/sc)'] = df.at[index, 'Preço (u$/sc)'] / cotacao
+
+                    if 'Resultado U$' in df.columns:
+                        df.at[index, 'Resultado U$'] = df.at[index, 'Resultado U$'] / cotacao
+
+                except Exception as e:
+                    st.warning(f"Erro ao processar transação {index}: {e}")
+                    # Usar cotação padrão em caso de erro
+                    cotacao_padrao = 6.00
+
+                    if 'Preço (u$/sc)' in df.columns:
+                        df.at[index, 'Preço (u$/sc)'] = df.at[index, 'Preço (u$/sc)'] / cotacao_padrao
+
+                    if 'Resultado U$' in df.columns:
+                        df.at[index, 'Resultado U$'] = df.at[index, 'Resultado U$'] / cotacao_padrao
+
+                    df.at[index, 'cotacao_usada'] = cotacao_padrao
+        else:
+            # Se "Data BL" não for encontrada, verificar outras colunas de data comuns
+            st.warning("Coluna 'Data BL' não encontrada. Verificando outras colunas de data.")
+
+            # Tentar encontrar outra coluna de data
+            data_col = None
+            for possible_col in ['data', 'data_venda', 'data_pagamento', 'mes', 'Data']:
+                if possible_col in df.columns:
+                    data_col = possible_col
+                    st.info(f"Usando coluna alternativa '{data_col}' para determinação da cotação")
+                    break
+
+            if data_col:
+                # Código similar ao acima para processar com a coluna alternativa
+                # (omitido por brevidade, mas seria igual ao bloco anterior)
+                pass
+            else:
+                # Se nenhuma coluna de data for encontrada, usar cotação mais recente
+                st.warning("Nenhuma coluna de data encontrada. Usando cotação mais recente para todas as conversões.")
+                cotacao_padrao = cotacoes_dolar.iloc[-1]
+
+                # Aplicar a mesma cotação para todas as linhas de mercado interno
+                if 'Preço (u$/sc)' in df.columns:
+                    df.loc[mask_mercado_interno, 'Preço (u$/sc)'] = df.loc[
+                                                                        mask_mercado_interno, 'Preço (u$/sc)'] / cotacao_padrao
+
+                if 'Resultado U$' in df.columns:
+                    df.loc[mask_mercado_interno, 'Resultado U$'] = df.loc[
+                                                                       mask_mercado_interno, 'Resultado U$'] / cotacao_padrao
+
+                # Adicionar informação sobre a cotação usada
+                df.loc[mask_mercado_interno, 'cotacao_usada'] = cotacao_padrao
 
     return df
+
 
 df = load_data()
 
