@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import yfinance as yf
-from datetime import datetime
 
 st.set_page_config(page_title="Dashboard de Vendas de Café", page_icon="☕", layout="wide")
 
@@ -46,127 +44,45 @@ client_info = {
     },
 }
 
+# Adicionar controle para ajustar a cotação do dólar na sidebar
+st.sidebar.title("Configurações")
+cotacao_dolar = st.sidebar.number_input(
+    "💱 Cotação do Dólar (R$)",
+    min_value=1.0,
+    max_value=10.0,
+    value=5.80,
+    step=0.05,
+    format="%.2f",
+    help="Ajuste a cotação do dólar para recalcular os valores em reais"
+)
 
-# Obter cotações do dólar
-@st.cache_data(ttl=24 * 3600)
-def obter_cotacoes_dolar():
-    symbols = ['USDBRL=X']
-    hoje = datetime.now()
-    dolar = yf.download(symbols, start="2004-01-01", end=hoje)["Close"]
-    # Calcular média mensal (alterado de YE para M para média mensal)
-    media_mensal = dolar.resample('ME').mean()
-    return media_mensal
+# Aviso sobre a atualização da cotação
+#st.sidebar.info("ℹ️ Valores recalculados para contratos a receber.")
 
-
-# Chamar a função para obter as cotações
-cotacoes_dolar = obter_cotacoes_dolar()
-
-
-@st.cache_data
-def load_data():
-    df = pd.read_excel("vendas_cafe.xlsx")
+@st.cache_data(show_spinner=False)
+def load_data(dolar_value):
+    df = pd.read_excel("vendas_cafe_em_reais.xlsx")
     df["peneira"] = df["peneira"].astype(str)
 
-    # Convertendo preços de mercado interno de BRL para USD usando cotações mensais
-    mask_mercado_interno = df['tipo'] == 'Mercado Interno'
+    # Usar o valor do dólar definido pelo usuário
+    df['PTAX'] = df['PTAX'].fillna(dolar_value)
 
-    # Apenas processa as linhas de mercado interno
-    if mask_mercado_interno.any():
-        # Usar especificamente a coluna "Data BL"
-        data_col = 'Data BL'
+    # Recalcular os preços em reais com base na cotação do dólar
+    mask_preco_rs_vazio = df['Preço (R$/sc)'].isna()
+    df.loc[mask_preco_rs_vazio, 'Preço (R$/sc)'] = df.loc[mask_preco_rs_vazio, 'Preço (u$/sc)'] * df.loc[
+        mask_preco_rs_vazio, 'PTAX']
 
-        if data_col in df.columns:
-
-            # Para cada linha do mercado interno
-            for index, row in df[mask_mercado_interno].iterrows():
-                try:
-                    # Converter para timestamp se ainda não for
-                    if not isinstance(row[data_col], pd.Timestamp):
-                        data_venda = pd.to_datetime(row[data_col])
-                    else:
-                        data_venda = row[data_col]
-
-                    # Obter o ano e mês para encontrar a cotação
-                    ano = data_venda.year
-                    mes = data_venda.month
-
-                    # Primeiro, criar um timestamp para o primeiro dia do mês
-                    data_inicio_mes = pd.Timestamp(year=ano, month=mes, day=1)
-
-                    # Encontrar a cotação mais próxima
-                    if data_inicio_mes in cotacoes_dolar.index:
-                        # Cotação encontrada diretamente
-                        cotacao = cotacoes_dolar.loc[data_inicio_mes]
-                    else:
-                        # Procurar a cotação mais próxima anterior
-                        cotacoes_anteriores = cotacoes_dolar[cotacoes_dolar.index <= data_inicio_mes]
-                        if not cotacoes_anteriores.empty:
-                            cotacao = cotacoes_anteriores.iloc[-1]
-                        else:
-                            # Se não encontrar nenhuma cotação anterior, usa a primeira disponível
-                            cotacao = cotacoes_dolar.iloc[0]
-
-                    # Realizar a conversão BRL para USD
-                    if 'Preço (u$/sc)' in df.columns:
-                        df.at[index, 'Preço (u$/sc)'] = df.at[index, 'Preço (u$/sc)'] / cotacao
-
-                    if 'Resultado U$' in df.columns:
-                        df.at[index, 'Resultado U$'] = df.at[index, 'Resultado U$'] / cotacao
-
-                except Exception as e:
-                    st.warning(f"Erro ao processar transação {index}: {e}")
-                    # Usar cotação padrão em caso de erro
-                    cotacao_padrao = 6.00
-
-                    if 'Preço (u$/sc)' in df.columns:
-                        df.at[index, 'Preço (u$/sc)'] = df.at[index, 'Preço (u$/sc)'] / cotacao_padrao
-
-                    if 'Resultado U$' in df.columns:
-                        df.at[index, 'Resultado U$'] = df.at[index, 'Resultado U$'] / cotacao_padrao
-
-                    df.at[index, 'cotacao_usada'] = cotacao_padrao
-        else:
-            # Se "Data BL" não for encontrada, verificar outras colunas de data comuns
-            st.warning("Coluna 'Data BL' não encontrada. Verificando outras colunas de data.")
-
-            # Tentar encontrar outra coluna de data
-            data_col = None
-            for possible_col in ['data', 'data_venda', 'data_pagamento', 'mes', 'Data']:
-                if possible_col in df.columns:
-                    data_col = possible_col
-                    st.info(f"Usando coluna alternativa '{data_col}' para determinação da cotação")
-                    break
-
-            if data_col:
-                # Código similar ao acima para processar com a coluna alternativa
-                # (omitido por brevidade, mas seria igual ao bloco anterior)
-                pass
-            else:
-                # Se nenhuma coluna de data for encontrada, usar cotação mais recente
-                st.warning("Nenhuma coluna de data encontrada. Usando cotação mais recente para todas as conversões.")
-                cotacao_padrao = cotacoes_dolar.iloc[-1]
-
-                # Aplicar a mesma cotação para todas as linhas de mercado interno
-                if 'Preço (u$/sc)' in df.columns:
-                    df.loc[mask_mercado_interno, 'Preço (u$/sc)'] = df.loc[
-                                                                        mask_mercado_interno, 'Preço (u$/sc)'] / cotacao_padrao
-
-                if 'Resultado U$' in df.columns:
-                    df.loc[mask_mercado_interno, 'Resultado U$'] = df.loc[
-                                                                       mask_mercado_interno, 'Resultado U$'] / cotacao_padrao
-
-                # Adicionar informação sobre a cotação usada
-                df.loc[mask_mercado_interno, 'cotacao_usada'] = cotacao_padrao
+    # Calculando a Receita R$ onde está ausente
+    mask_receita_rs_vazia = df['Receita R$'].isna()
+    df.loc[mask_receita_rs_vazia, 'Receita R$'] = df.loc[mask_receita_rs_vazia, 'Preço (R$/sc)'] * df.loc[
+        mask_receita_rs_vazia, '# Sacas']
 
     return df
 
+# Passar a cotação do dólar como parâmetro para a função load_data
+df = load_data(cotacao_dolar)
 
-df = load_data()
-
-# PARTE CRÍTICA: Definir paletas de cores consistentes para todas as categorias
-# e criar um COLOR_MAP global para ser usado em todos os gráficos
-
-# Mover este bloco para logo após carregar o DataFrame (depois de df = load_data())
+# Definir paletas de cores consistentes para todas as categorias
 peneiras = sorted(list(df['peneira'].astype(str).unique()))
 clientes = sorted(list(df['Cliente'].unique()))
 qualidades = sorted(list(df['qualidade'].unique()))
@@ -177,22 +93,22 @@ COLORS_CLIENTES = px.colors.qualitative.Vivid[:len(clientes)]
 COLORS_QUALIDADES = px.colors.qualitative.D3[:len(qualidades)]
 
 # Criar um dicionário de cores para todas as categorias
-# Este é o dicionário principal que garantirá cores consistentes em todas as visualizações
 COLOR_MAP = {}
 
-# Adicionar mapeamento de cores para cada categoria
 COLOR_MAP.update(dict(zip(peneiras, COLORS_PENEIRAS)))
 COLOR_MAP.update(dict(zip(clientes, COLORS_CLIENTES)))
 COLOR_MAP.update(dict(zip(qualidades, COLORS_QUALIDADES)))
 
 st.title("☕ Dashboard de Vendas de Café")
 
+# Adicionar informação sobre a cotação atual
+#st.markdown(f"**Cotação do dólar atual: R$ {cotacao_dolar:.2f}**")
+
 st.sidebar.title("Filtros")
 
-incluir_estimativas = st.sidebar.checkbox("📈 Incluir Estimativas", value=True)
 safras = st.sidebar.multiselect("Safras",
                                 options=sorted(df['safra'].unique()),
-                                default=sorted(df['safra'].unique())[0])
+                                default=sorted(df['safra'].unique())[1])
 
 clientes = st.sidebar.multiselect("Clientes",
                                   options=sorted(df['Cliente'].unique()),
@@ -240,12 +156,14 @@ qualidades = st.sidebar.multiselect("Qualidades",
                                     options=sorted([str(p) for p in df['qualidade'].unique() if pd.notna(p)]),
                                     default=sorted([str(p) for p in df['qualidade'].unique() if pd.notna(p)]))
 
+incluir_estimativas = st.sidebar.checkbox("📈 Incluir Estoque", value=False)
+
 mask = (df['safra'].isin(safras) &
         df['Cliente'].isin(clientes) &
         df['peneira'].astype(str).isin(peneiras) &
         df['qualidade'].astype(str).isin(qualidades))
 if not incluir_estimativas:
-    mask &= df['Cliente'] != "Estimativa"
+    mask &= df['Cliente'] != "Estoque"
 df_filtered = df[mask]
 
 
@@ -255,11 +173,11 @@ def display_metrics(data):
         total_sacas = int(data['# Sacas'].sum())
         st.metric("Total de Sacas", f"{total_sacas:,}")
     with cols[1]:
-        total_revenue = data['Resultado U$'].sum()
-        st.metric("Faturamento Total", f"U$ {total_revenue:,.0f}")
+        total_revenue = data['Receita R$'].sum()
+        st.metric("Faturamento Total", f"R$ {total_revenue:,.0f}")
     with cols[2]:
         avg_price = total_revenue / total_sacas if total_sacas > 0 else 0
-        st.metric("Valor médio da saca", f"U$ {avg_price:.2f}/sc")
+        st.metric("Valor médio da saca", f"R$ {avg_price:.2f}/sc")
 
 
 def create_volume_chart(data, dimension):
@@ -283,17 +201,17 @@ def create_price_chart(data, dimension):
     # Garantir que usamos o COLOR_MAP global para consistência de cores
     price_data = data.groupby(dimension).agg({
         '# Sacas': 'sum',
-        'Resultado U$': 'sum'
+        'Receita R$': 'sum'
     }).reset_index()
 
-    price_data['Preço Médio'] = price_data['Resultado U$'] / price_data['# Sacas']
+    price_data['Preço Médio'] = price_data['Receita R$'] / price_data['# Sacas']
     price_data['Preço Médio'] = price_data['Preço Médio'].round(2)
 
     # Usar mapeamento de cores explícito para garantir consistência
     fig = px.scatter(price_data,
                      x=dimension,
                      y='Preço Médio',
-                     title=f"Valor médio da saca (U$/sc) por {dimension}",
+                     title=f"Valor médio da saca (R$/sc) por {dimension}",
                      size='# Sacas',
                      color=dimension,
                      size_max=60,
@@ -306,11 +224,11 @@ def create_price_chart(data, dimension):
 
 def create_revenue_chart(data, dimension):
     # Garantir que usamos o COLOR_MAP global para consistência de cores
-    revenue_data = data.groupby(dimension)['Resultado U$'].sum().sort_values(ascending=True).reset_index()
+    revenue_data = data.groupby(dimension)['Receita R$'].sum().sort_values(ascending=True).reset_index()
 
     # Usar mapeamento de cores explícito para garantir consistência
     fig = px.bar(revenue_data,
-                 x='Resultado U$',
+                 x='Receita R$',
                  y=dimension,
                  title=f"Faturamento Total por {dimension}",
                  orientation='h',
