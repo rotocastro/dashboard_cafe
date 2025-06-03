@@ -2,10 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import numpy as np
-from datetime import datetime, timedelta
-import calendar
-import yfinance as yf
 
 # Configurações da página
 st.set_page_config(page_title="Dashboard de Vendas de Café", page_icon="☕", layout="wide")
@@ -67,9 +63,9 @@ cotacao_dolar = st.sidebar.number_input(
 def load_data(dolar_value):
     # Carregue seus dados existentes
     df = pd.read_excel("vendas_cafe_em_reais.xlsx")
-    #df_hist = pd.read_excel("vendas_cafe_em_reais.xlsx", sheet_name="medias_historicas")
+    df_hist = pd.read_excel("vendas_cafe_em_reais.xlsx", sheet_name="medias_diarias")
 
-    df["peneira"] = df["peneira"].astype(str)
+    df["Peneira"] = df["Peneira"].astype(str)
 
     # Usar o valor do dólar definido pelo usuário
     df['PTAX'] = df['PTAX'].fillna(dolar_value)
@@ -87,21 +83,18 @@ def load_data(dolar_value):
     # Converter 'Data Pagamento' para datetime
     df['Data Pagamento'] = pd.to_datetime(df['Data Pagamento'], errors='coerce')
 
-    return df
+    if 'Data' in df_hist.columns:
+        df_hist['Data'] = pd.to_datetime(df_hist['Data'], errors='coerce')
+
+    return df, df_hist
 
 # Passar a cotação do dólar como parâmetro para a função load_data
-df = load_data(cotacao_dolar)
-
-    # # Função para obter dados do Yahoo Finance
-    # @st.cache_data(ttl=3600)  # Cache por 1 hora
-    # def get_yahoo_finance_data(ticker, start_date, end_date):
-    #     data = yf.download(ticker, start=start_date, end=end_date)
-    #     return data
+df, df_hist = load_data(cotacao_dolar)
 
 # Definir paletas de cores consistentes para todas as categorias
-peneiras = sorted(list(df['peneira'].astype(str).unique()))
+peneiras = sorted(list(df['Peneira'].astype(str).unique()))
 clientes = sorted(list(df['Cliente'].unique()))
-qualidades = sorted(list(df['qualidade'].unique()))
+qualidades = sorted(list(df['Qualidade'].unique()))
 
 # Usar paletas de cores fixas para garantir consistência
 COLORS_PENEIRAS = (px.colors.qualitative.Prism + px.colors.qualitative.Safe)[:len(peneiras)]
@@ -115,14 +108,18 @@ COLOR_MAP.update(dict(zip(peneiras, COLORS_PENEIRAS)))
 COLOR_MAP.update(dict(zip(clientes, COLORS_CLIENTES)))
 COLOR_MAP.update(dict(zip(qualidades, COLORS_QUALIDADES)))
 
-st.title("☕ Dashboard de Vendas de Café")
 
+st.title("☕ Dashboard de Vendas de Café")
 
 st.sidebar.title("Filtros")
 
 safras = st.sidebar.multiselect("Safras",
-                                options=sorted(df['safra'].unique()),
-                                default=[2024])
+                                options=sorted(df['Safra'].unique()),
+                                default=[2024, 2025])
+
+mercado = st.sidebar.multiselect("Mercado",
+                                 options=sorted(df['Mercado'].unique()),
+                                 default=sorted(df['Mercado'].unique()))
 
 incluir_estimativas = st.sidebar.checkbox("📈 Incluir Estoque", value=False)
 
@@ -168,14 +165,15 @@ if selected_clients_in_info:
 #                                   options=sorted([str(p) for p in df['peneira'].unique() if pd.notna(p)]),
 #                                   default=sorted([str(p) for p in df['peneira'].unique() if pd.notna(p)]))
 
-qualidades = st.sidebar.multiselect("Qualidades",
-                                    options=sorted([str(p) for p in df['qualidade'].unique() if pd.notna(p)]),
-                                    default=sorted([str(p) for p in df['qualidade'].unique() if pd.notna(p)]))
+qualidades = st.sidebar.multiselect("Qualidade",
+                                    options=sorted([str(p) for p in df['Qualidade'].unique() if pd.notna(p)]),
+                                    default=sorted([str(p) for p in df['Qualidade'].unique() if pd.notna(p)]))
 
-mask = (df['safra'].isin(safras) &
+mask = (df['Safra'].isin(safras) &
         df['Cliente'].isin(clientes) &
-        df['peneira'].astype(str).isin(peneiras) &
-        df['qualidade'].astype(str).isin(qualidades))
+        df['Peneira'].astype(str).isin(peneiras) &
+        df['Qualidade'].astype(str).isin(qualidades) &
+        df['Mercado'].isin(mercado))
 if not incluir_estimativas:
     mask &= df['Cliente'] != "Estoque"
 df_filtered = df[mask]
@@ -278,7 +276,7 @@ def create_pie_chart(data, dimension):
 
 def create_market_comparison(data):
     # Verificar se há dados suficientes
-    if data.empty or not data['tipo'].isin(['Exportação', 'Mercado Interno']).any():
+    if data.empty or not data['Mercado'].isin(['Exportação', 'Mercado Interno']).any():
         # Retornar uma mensagem ou um gráfico vazio
         fig = go.Figure()
         fig.update_layout(
@@ -296,7 +294,7 @@ def create_market_comparison(data):
         return fig
 
     # Agrupar por tipo de mercado (resto do código permanece igual)
-    market_comp = data.groupby('tipo').agg({
+    market_comp = data.groupby('Mercado').agg({
         '# Sacas': 'sum',
         'Receita R$': 'sum'
     }).reset_index()
@@ -316,19 +314,18 @@ def create_market_comparison(data):
         axis=1
     )
 
-    # Resto do código permanece igual...
     # Criar o gráfico de barras
     fig = px.bar(
         market_comp,
-        x='tipo',
+        x='Mercado',
         y='# Sacas',
-        color='tipo',
+        color='Mercado',
         title='Comparação entre Tipos de Mercado',
         text='text',
         hover_data={
             '# Sacas': False,
             'text': False,
-            'tipo': True,
+            'Mercado': True,
             'hover_text': True
         }
     )
@@ -336,7 +333,7 @@ def create_market_comparison(data):
     # Adicionar anotações com as porcentagens
     for i, row in market_comp.iterrows():
         fig.add_annotation(
-            x=row['tipo'],
+            x=row['Mercado'],
             y=row['# Sacas'] * 1.05,
             text=f"{row['Percentual']}%",
             showarrow=False,
@@ -347,7 +344,7 @@ def create_market_comparison(data):
     fig.update_layout(
         uniformtext_minsize=12,
         uniformtext_mode='hide',
-        xaxis_title="Tipo de Mercado",
+        xaxis_title="Tipos de Mercado",
         yaxis_title="Número de Sacas",
         bargap=0.4
     )
@@ -364,18 +361,161 @@ def create_market_comparison(data):
     return fig
 
 
+def create_temporal_analysis(data, historico):
+    # Verificar se temos dados de pagamento e preço:
+    if data.empty or data["Data Pagamento"].isna().all() or historico.empty:
+        fig = go.Figure()
+        fig.update_layout(
+            title="Sem dados suficientes para análise temporal",
+            annotations=[dict(
+                text="Não há dados de pagamento ou histórico para os filtros selecionados",
+                showarrow=False,
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.5,
+                font=dict(size=16)
+            )]
+        )
+        return fig
+
+    fig = go.Figure()
+
+    # Verificar qual coluna usar para o preço médio histórico
+    price_column = None
+    if 'Preco_medio' in historico.columns:
+        price_column = 'Preco_medio'
+    elif 'Saca (R$)' in historico.columns:
+        price_column = 'Saca (R$)'
+
+    # Garantir que a Data existe e está em formato datetime
+    if 'Data' in historico.columns and price_column and not historico.empty:
+        # Certificar que a Data está em formato datetime
+        if not pd.api.types.is_datetime64_any_dtype(historico['Data']):
+            historico['Data'] = pd.to_datetime(historico['Data'], errors='coerce')
+
+        # Ordenar os dados históricos por data
+        historico_sorted = historico.sort_values('Data')
+
+        # Verificar se existem valores NaN e remover ou preencher conforme necessário
+        historico_sorted = historico_sorted.dropna(subset=['Data', price_column])
+
+        # Verificar se ainda temos dados após a limpeza
+        if not historico_sorted.empty:
+            # Adicionar a linha de média histórica
+            fig.add_trace(go.Scatter(
+                x=historico_sorted['Data'],
+                y=historico_sorted[price_column],
+                mode='lines',
+                name='NY * Dólar',
+                line=dict(color='rgba(31, 119, 180, 0.8)', width=2),
+                hovertemplate='Data: %{x|%d/%m/%Y}<br>Preço Médio: R$ %{y:.2f}/sc<extra></extra>'
+            ))
+
+        # Filtrar apenas os dados com data de pagamento
+        data_com_data = data.dropna(subset=['Data Pagamento'])
+
+        if not data_com_data.empty:
+            # Certificar que a Data Pagamento está em formato datetime
+            if not pd.api.types.is_datetime64_any_dtype(data_com_data['Data Pagamento']):
+                data_com_data['Data Pagamento'] = pd.to_datetime(data_com_data['Data Pagamento'], errors='coerce')
+
+            # Remover linhas onde Data Pagamento for NaT após a conversão
+            data_com_data = data_com_data.dropna(subset=['Data Pagamento'])
+
+            if not data_com_data.empty:
+                # Para cada contrato, criar um ponto no scatter
+                scatter_data = data_com_data.copy()
+
+                # Usar a coluna 'Código' existente, ou criar um ID temporário se não existir
+                if 'Código' not in scatter_data.columns:
+                    scatter_data['codigo_display'] = scatter_data.index.astype(str)
+                else:
+                    scatter_data['codigo_display'] = scatter_data['Código']
+
+                # Calcular preço médio para cada contrato
+                scatter_data['preco_medio_contrato'] = scatter_data['Preço (R$/sc)']
+
+                # Verificar se os valores são numéricos
+                if not pd.api.types.is_numeric_dtype(scatter_data['preco_medio_contrato']):
+                    # Tentar converter para numérico
+                    scatter_data['preco_medio_contrato'] = pd.to_numeric(
+                        scatter_data['preco_medio_contrato'], errors='coerce')
+
+                # Remover linhas com preços não numéricos
+                scatter_data = scatter_data.dropna(subset=['preco_medio_contrato'])
+
+                if not scatter_data.empty:
+                    # Criar o texto para hover incluindo a qualidade
+                    scatter_data['hover_text'] = scatter_data.apply(
+                        lambda row: f"Código: {row['codigo_display']}<br>" +
+                                    f"Cliente: {row['Cliente']}<br>" +
+                                    f"Qualidade: {row.get('Qualidade', 'N/A')}<br>" +
+                                    f"Diferencial: {row.get('Diferencial'):.0f}<br>" +
+                                    f"Sacas: {int(row['# Sacas']):,}<br>" +
+                                    f"Valor Médio: R$ {row['preco_medio_contrato']:.2f}/sc",
+                        axis=1
+                    )
+
+                    # Calcular tamanho dos pontos (proporcional ao número de sacas)
+                    # Garantir que '# Sacas' seja numérico
+                    if not pd.api.types.is_numeric_dtype(scatter_data['# Sacas']):
+                        scatter_data['# Sacas'] = pd.to_numeric(scatter_data['# Sacas'], errors='coerce')
+                        scatter_data = scatter_data.dropna(subset=['# Sacas'])
+
+                    if not scatter_data.empty:
+                        min_size = 5  # Tamanho mínimo
+                        max_size = scatter_data['# Sacas'].max()
+
+                        # Evitar divisão por zero se todas as sacas tiverem o mesmo valor
+                        if max_size > 0:
+                            scatter_data['marker_size'] = (scatter_data['# Sacas'] / max_size * 30) + min_size
+                        else:
+                            scatter_data['marker_size'] = min_size
+
+                        # Adicionar scatter para os contratos
+                        fig.add_trace(go.Scatter(
+                            x=scatter_data['Data Pagamento'],
+                            y=scatter_data['preco_medio_contrato'],
+                            mode='markers',
+                            name='Contratos',
+                            marker=dict(
+                                size=scatter_data['marker_size'],
+                                color=scatter_data['# Sacas'],
+                                colorscale='Viridis',
+                                opacity=0.7,
+                                colorbar=dict(title="Sacas"),
+                                line=dict(width=1, color='DarkSlateGrey')
+                            ),
+                            text=scatter_data['hover_text'],
+                            hoverinfo='text'
+                        ))
+
+        # Configurar o layout
+        fig.update_layout(
+            title='Análise Temporal de Preços',
+            xaxis_title='Data',
+            yaxis_title='Preço Médio (R$/sc)',
+            hovermode='closest',
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            margin=dict(l=10, r=10, t=40, b=10),
+            height=600
+        )
+
+        return fig
+
+
 tab1, tab4, tab5, tab7 = st.tabs([
     '📊 Consolidado',
     #'👥 Por Cliente',
     #'📏 Por Peneira',
     '✨ Por Qualidade',
     '🌍 Exportação vs Mercado Interno',
-    '💰 CashFlow'
+    '💰 CashFlow',
     #'📅 Análise Temporal',
 
 ])
 
-# Organize os gráficos em 2 linhas de 2 colunas ao invés de 4 colunas
 with tab1:
     display_metrics(df_filtered)
     st.markdown("### Visão Geral")
@@ -423,22 +563,22 @@ with tab4:
     display_metrics(df_filtered)
     col1, col2 = st.columns(2)
     with col1:
-        st.plotly_chart(create_volume_chart(df_filtered, 'qualidade'), key="vol_4", use_container_width=True)
+        st.plotly_chart(create_volume_chart(df_filtered, 'Qualidade'), key="vol_4", use_container_width=True)
     with col2:
-        st.plotly_chart(create_pie_chart(df_filtered, 'qualidade'), key="pie_4", use_container_width=True)
+        st.plotly_chart(create_pie_chart(df_filtered, 'Qualidade'), key="pie_4", use_container_width=True)
 
     col3, col4 = st.columns(2)
     with col3:
-        st.plotly_chart(create_revenue_chart(df_filtered, 'qualidade'), key="rev_4", use_container_width=True)
+        st.plotly_chart(create_revenue_chart(df_filtered, 'Qualidade'), key="rev_4", use_container_width=True)
     with col4:
-        st.plotly_chart(create_price_chart(df_filtered, 'qualidade'), key="price_4", use_container_width=True)
+        st.plotly_chart(create_price_chart(df_filtered, 'Qualidade'), key="price_4", use_container_width=True)
 
 with tab5:
     # Verificar se há dados suficientes
-    has_market_data = df_filtered['tipo'].isin(['Exportação', 'Mercado Interno']).any()
+    has_market_data = df_filtered['Mercado'].isin(['Exportação', 'Mercado Interno']).any()
 
     if has_market_data:
-        display_metrics(df_filtered[df_filtered['tipo'].isin(['Exportação', 'Mercado Interno'])])
+        display_metrics(df_filtered[df_filtered['Mercado'].isin(['Exportação', 'Mercado Interno'])])
 
         # Adicionar comparação de tipos de mercado
         st.plotly_chart(create_market_comparison(df_filtered), use_container_width=True)
@@ -446,8 +586,8 @@ with tab5:
         # Comparar preços médios por tipo
         col1, col2 = st.columns(2)
 
-        export_data = df_filtered[df_filtered['tipo'] == 'Exportação']
-        internal_data = df_filtered[df_filtered['tipo'] == 'Mercado Interno']
+        export_data = df_filtered[df_filtered['Mercado'] == 'Exportação']
+        internal_data = df_filtered[df_filtered['Mercado'] == 'Mercado Interno']
 
         if not export_data.empty:
             with col1:
@@ -476,7 +616,186 @@ with tab5:
                 f"Café para exportação tem preço {price_diff_pct:.1f}% {'maior' if price_diff_pct > 0 else 'menor'} que o mercado interno.")
     else:
         st.warning(
-            "Não há dados suficientes para exibir a comparação entre Exportação e Mercado Interno. Verifique os filtros aplicados.")
+            "Não há dados suficientes para exibir a comparação.")
+
+#with tab6:
+    st.markdown("### Análise Temporal de Preços")
+
+    display_metrics(df_filtered)
+
+    # Determinar qual coluna usar para o preço médio histórico
+    price_column = None
+    if not df_hist.empty:
+        if 'Preco_medio' in df_hist.columns:
+            price_column = 'Preco_medio'
+        elif 'Saca (R$)' in df_hist.columns:
+            price_column = 'Saca (R$)'
+
+    # Verificar se temos dados suficientes
+    has_temporal_data = (
+            not df_filtered.empty and
+            df_filtered['Data Pagamento'].notna().any() and
+            not df_hist.empty and
+            'Data' in df_hist.columns and
+            price_column is not None
+    )
+
+    if has_temporal_data:
+        # Certificar que as datas estão em formato datetime
+        if not pd.api.types.is_datetime64_any_dtype(df_hist['Data']):
+            df_hist['Data'] = pd.to_datetime(df_hist['Data'], errors='coerce')
+
+        if not pd.api.types.is_datetime64_any_dtype(df_filtered['Data Pagamento']):
+            df_filtered['Data Pagamento'] = pd.to_datetime(df_filtered['Data Pagamento'], errors='coerce')
+
+        # Remover valores NaT
+        df_hist_clean = df_hist.dropna(subset=['Data'])
+        df_filtered_clean = df_filtered.dropna(subset=['Data Pagamento'])
+
+        # Calcular data mínima para a visualização (3 meses antes do primeiro pagamento)
+        first_payment_date = df_filtered_clean['Data Pagamento'].min() if not df_filtered_clean.empty else None
+
+        if first_payment_date:
+            # Calcular data 3 meses antes do primeiro pagamento
+            first_date_minus_3months = (first_payment_date - pd.DateOffset(months=3)).date()
+            # Garantir que a data mínima não seja anterior ao primeiro dado histórico
+            hist_min_date = df_hist_clean['Data'].min().date() if not df_hist_clean.empty else None
+            if hist_min_date:
+                # Usar a data mais recente entre o histórico mínimo e 3 meses antes do primeiro pagamento
+                min_date = max(hist_min_date, first_date_minus_3months)
+            else:
+                min_date = first_date_minus_3months
+        else:
+            # Se não houver pagamentos, usar o mínimo histórico
+            min_date = df_hist_clean['Data'].min().date() if not df_hist_clean.empty else None
+
+        max_date = df_hist_clean['Data'].max().date() if not df_hist_clean.empty else None
+
+        # Criar o slider para seleção de período apenas se tivermos datas válidas
+        if min_date and max_date:
+            # Verificar se min_date não é maior que max_date
+            if min_date <= max_date:
+                date_range = st.slider(
+                    "Selecione o período para visualização da análise temporal",
+                    min_value=min_date,
+                    max_value=max_date,
+                    value=(min_date, max_date),
+                    format="MMM/YY"
+                )
+
+                # Obter as datas do slider
+                start_date, end_date = date_range
+
+                # Filtrar dados históricos pelo período selecionado
+                filtered_hist = df_hist_clean.copy()
+                filtered_hist = filtered_hist[
+                    (filtered_hist['Data'].dt.date >= start_date) &
+                    (filtered_hist['Data'].dt.date <= end_date)
+                    ]
+
+                # Exibir gráfico apenas se existirem dados no período
+                if not filtered_hist.empty:
+                    # Exibir o gráfico de análise temporal
+                    temporal_chart = create_temporal_analysis(df_filtered_clean, filtered_hist)
+                    st.plotly_chart(temporal_chart, use_container_width=True)
+
+                    # Adicionar estatísticas complementares
+                    st.markdown("### Estatísticas do Período Selecionado")
+
+                    # Calcular estatísticas dos dados históricos (removendo mediana e desvio padrão)
+                    if price_column in filtered_hist.columns:
+                        hist_stats = {
+                            'Média': filtered_hist[price_column].mean(),
+                            'Mínimo': filtered_hist[price_column].min(),
+                            'Máximo': filtered_hist[price_column].max()
+                        }
+
+                        # Filtrar contratos do período selecionado
+                        contratos_periodo = df_filtered_clean[
+                            (df_filtered_clean['Data Pagamento'].dt.date >= start_date) &
+                            (df_filtered_clean['Data Pagamento'].dt.date <= end_date)
+                            ]
+
+                        if not contratos_periodo.empty:
+                            # Verificar se Preço (R$/sc) é numérico
+                            if not pd.api.types.is_numeric_dtype(contratos_periodo['Preço (R$/sc)']):
+                                contratos_periodo['Preço (R$/sc)'] = pd.to_numeric(
+                                    contratos_periodo['Preço (R$/sc)'], errors='coerce')
+
+                            # Ignorar valores não numéricos
+                            contratos_periodo = contratos_periodo.dropna(subset=['Preço (R$/sc)'])
+
+                            if not contratos_periodo.empty:
+                                contratos_stats = {
+                                    'Média': contratos_periodo['Preço (R$/sc)'].mean(),
+                                    'Mínimo': contratos_periodo['Preço (R$/sc)'].min(),
+                                    'Máximo': contratos_periodo['Preço (R$/sc)'].max(),
+                                    'Total de Contratos': len(contratos_periodo),
+                                    'Total de Sacas': contratos_periodo['# Sacas'].sum()
+                                }
+
+                                # Exibir estatísticas em colunas
+                                col1, col2 = st.columns(2)
+
+                                with col1:
+                                    st.markdown("#### Dados históricos")
+                                    for label, value in hist_stats.items():
+                                        if label in ['Média', 'Mínimo', 'Máximo']:
+                                            st.metric(label, f"R$ {value:.2f}/sc")
+
+                                with col2:
+                                    st.markdown("#### Contratos no período")
+                                    for label, value in contratos_stats.items():
+                                        if label in ['Média', 'Mínimo', 'Máximo']:
+                                            st.metric(label, f"R$ {value:.2f}/sc")
+                                        elif label == 'Total de Sacas':
+                                            st.metric(label, f"{int(value):,}")
+                                        elif label == 'Total de Contratos':
+                                            st.metric(label, f"{int(value)}")
+
+                                # Exibir tabela de contratos
+                                if st.checkbox("Exibir tabela de contratos"):
+                                    # Selecionar e formatar colunas relevantes
+                                    contratos_table = contratos_periodo[[
+                                        'Cliente', 'Data Pagamento', '# Sacas', 'Preço (R$/sc)', 'Receita R$', 'tipo'
+                                    ]].copy()
+
+                                    # Ordenar por data
+                                    contratos_table = contratos_table.sort_values('Data Pagamento')
+
+                                    # Formatar colunas numéricas
+                                    contratos_table['# Sacas'] = contratos_table['# Sacas'].apply(
+                                        lambda x: f"{int(x):,}")
+                                    contratos_table['Preço (R$/sc)'] = contratos_table['Preço (R$/sc)'].apply(
+                                        lambda x: f"R$ {x:.2f}")
+                                    contratos_table['Receita R$'] = contratos_table['Receita R$'].apply(
+                                        lambda x: f"R$ {x:,.2f}")
+
+                                    # Renomear colunas para melhor visualização
+                                    contratos_table.columns = [
+                                        'Cliente', 'Data Pagamento', 'Sacas', 'Valor/Saca', 'Receita Total', 'Tipo'
+                                    ]
+
+                                    # Exibir tabela
+                                    st.dataframe(contratos_table, use_container_width=True)
+                        else:
+                            st.warning("Não há contratos no período selecionado.")
+                else:
+                    st.warning(
+                        "Não há dados históricos disponíveis para o período selecionado."
+                    )
+            else:
+                st.warning(
+                    "Problema com as datas: a data mínima é maior que a data máxima."
+                )
+        else:
+            st.warning(
+                "Não foi possível determinar o período de análise devido a problemas com as datas."
+            )
+    else:
+        st.warning(
+            "Não há dados suficientes para exibir a análise temporal. Verifique se existem dados históricos e contratos com datas de pagamento."
+        )
 
 with tab7:
     st.markdown("### Fluxo de Caixa")
@@ -507,8 +826,8 @@ with tab7:
                         'Data': data_parcela,
                         'Valor': valor_por_parcela,
                         'Cliente': row['Cliente'],
-                        'tipo': row['tipo'],
-                        'safra': row['safra'],
+                        'Mercado': row['Mercado'],
+                        'Safra': row['Safra'],
                         'Parcela': i + 1,
                         'Total Parcelas': num_parcelas
                     })
@@ -535,7 +854,7 @@ with tab7:
     # Verificar se há dados com Data Pagamento
     if df_filtered.empty or df_filtered['Data Pagamento'].notna().sum() == 0:
         st.warning(
-            "Não há dados de fluxo de caixa disponíveis para os filtros selecionados. Verifique se as datas de pagamento estão preenchidas corretamente.")
+            "Não há dados de fluxo de caixa disponíveis para os filtros selecionados.")
     else:
         # Calcular o fluxo de caixa
         df_cashflow_detailed, monthly_cashflow = calculate_cashflow(df_filtered)
@@ -684,7 +1003,7 @@ with tab7:
 
         else:
             st.warning(
-                "Não há dados de fluxo de caixa disponíveis para os filtros selecionados. Verifique se as datas de pagamento estão preenchidas corretamente.")
+                "Não há dados de fluxo de caixa disponíveis para os filtros selecionados.")
 
 if st.sidebar.checkbox("📋 Exibir tabela de dados"):
     st.dataframe(df_filtered)
