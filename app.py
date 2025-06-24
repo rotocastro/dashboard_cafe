@@ -49,6 +49,7 @@ client_info = {
 
 # Adicionar controle para ajustar a cotação do dólar na sidebar
 st.sidebar.title("Configurações")
+
 cotacao_dolar = st.sidebar.number_input(
     "💱 Cotação do Dólar (R$)",
     min_value=1.0,
@@ -59,10 +60,40 @@ cotacao_dolar = st.sidebar.number_input(
     help="Ajuste a cotação do dólar para recalcular os valores em reais"
 )
 
+
+# Função para buscar a data da última atualização
+@st.cache_data(show_spinner=False)
+def get_last_update_date():
+    try:
+        # Ler a célula A1 da aba "futuros"
+        df_futuros = pd.read_excel("vendas_cafe_em_reais.xlsx", sheet_name="futuros", header=None, nrows=1, usecols=[0])
+        last_update = df_futuros.iloc[0, 0]
+
+        # Tentar converter para datetime se for string
+        if isinstance(last_update, str):
+            try:
+                last_update = pd.to_datetime(last_update)
+            except:
+                return last_update  # Retorna como string se não conseguir converter
+
+        # Se for datetime, formatar para exibição
+        if isinstance(last_update, pd.Timestamp):
+            return last_update.strftime("%d/%m/%Y")
+        else:
+            return str(last_update)
+    except Exception as e:
+        return "Data não disponível"
+
+
+# Buscar e exibir a data da última atualização
+ultima_atualizacao = get_last_update_date()
+st.sidebar.markdown(f"<small>📅 Última atualização: {ultima_atualizacao}</small>", unsafe_allow_html=True)
+
+
 @st.cache_data(show_spinner=False)
 def load_data(dolar_value):
     # Carregue seus dados existentes
-    df = pd.read_excel("vendas_cafe_em_reais.xlsx")
+    df = pd.read_excel("vendas_cafe_em_reais.xlsx", sheet_name="Sheet2")
     df_hist = pd.read_excel("vendas_cafe_em_reais.xlsx", sheet_name="medias_diarias")
 
     df["Peneira"] = df["Peneira"].astype(str)
@@ -83,8 +114,6 @@ def load_data(dolar_value):
     # Converter 'Data Pagamento' para datetime
     df['Data Pagamento'] = pd.to_datetime(df['Data Pagamento'], errors='coerce')
 
-    if 'Data' in df_hist.columns:
-        df_hist['Data'] = pd.to_datetime(df_hist['Data'], errors='coerce')
 
     return df, df_hist
 
@@ -117,11 +146,13 @@ safras = st.sidebar.multiselect("Safras",
                                 options=sorted(df['Safra'].unique()),
                                 default=[2024, 2025])
 
+incluir_estimativas = st.sidebar.checkbox("📈 Incluir Estoque", value=False)
+
+
 mercado = st.sidebar.multiselect("Mercado",
                                  options=sorted(df['Mercado'].unique()),
                                  default=sorted(df['Mercado'].unique()))
 
-incluir_estimativas = st.sidebar.checkbox("📈 Incluir Estoque", value=False)
 
 clientes = st.sidebar.multiselect("Clientes",
                                   options=sorted(df['Cliente'].unique()),
