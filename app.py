@@ -54,7 +54,7 @@ cotacao_dolar = st.sidebar.number_input(
     "💱 Cotação do Dólar (R$)",
     min_value=1.0,
     max_value=10.0,
-    value=5.70,
+    value=5.50,
     step=0.05,
     format="%.2f",
     help="Ajuste a cotação do dólar para recalcular os valores em reais"
