@@ -16,7 +16,7 @@ st.markdown("""
    </style>
 """, unsafe_allow_html=True)
 
-# Definição do client_info (mantido do código original)
+# Definição do client_info
 client_info = {
     "AW Trading - Unroasted": {
         "Nome": "AW TRADING SP. Z.O.O",
@@ -47,17 +47,13 @@ client_info = {
 }
 
 
-# Adicionar controle para ajustar a cotação do dólar na sidebar
+#Cotação do dólar na sidebar
 st.sidebar.title("Configurações")
 
 cotacao_dolar = st.sidebar.number_input(
     "💱 Cotação do Dólar (R$)",
-    min_value=1.0,
-    max_value=10.0,
-    value=5.70,
-    step=0.05,
-    format="%.2f",
-    help="Ajuste a cotação do dólar para recalcular os valores em reais"
+    min_value=1.0, max_value=10.0, value=5.50, step=0.05,
+    format="%.2f", help="Ajuste a cotação do dólar para recalcular os valores em reais"
 )
 
 
@@ -65,25 +61,18 @@ cotacao_dolar = st.sidebar.number_input(
 @st.cache_data(show_spinner=False)
 def get_last_update_date():
     try:
-        # Ler a célula A1 da aba "futuros"
-        df_futuros = pd.read_excel("vendas_cafe_em_reais.xlsx", sheet_name="futuros", header=None, nrows=1, usecols=[0])
-        last_update = df_futuros.iloc[0, 0]
+        df_futuros = pd.read_excel("vendas_cafe_em_reais.xlsx", sheet_name="futuros")
+        # Pegar o nome da coluna D (que é onde está a data)
+        last_update = df_futuros.columns[3]  # Nome da coluna D
 
-        # Tentar converter para datetime se for string
-        if isinstance(last_update, str):
-            try:
-                last_update = pd.to_datetime(last_update)
-            except:
-                return last_update  # Retorna como string se não conseguir converter
-
-        # Se for datetime, formatar para exibição
-        if isinstance(last_update, pd.Timestamp):
+        # Tentar converter para datetime
+        try:
+            last_update = pd.to_datetime(last_update, format='%d/%m/%y')
             return last_update.strftime("%d/%m/%Y")
-        else:
+        except:
             return str(last_update)
     except Exception as e:
         return "Data não disponível"
-
 
 # Buscar e exibir a data da última atualização
 ultima_atualizacao = get_last_update_date()
@@ -92,13 +81,9 @@ st.sidebar.markdown(f"<small>📅 Última atualização: {ultima_atualizacao}</s
 
 @st.cache_data(show_spinner=False)
 def load_data(dolar_value):
-    # Carregue seus dados existentes
     df = pd.read_excel("vendas_cafe_em_reais.xlsx", sheet_name="Sheet2")
-    df_hist = pd.read_excel("vendas_cafe_em_reais.xlsx", sheet_name="medias_diarias")
 
     df["Peneira"] = df["Peneira"].astype(str)
-
-    # Usar o valor do dólar definido pelo usuário
     df['PTAX'] = df['PTAX'].fillna(dolar_value)
 
     # Recalcular os preços em reais com base na cotação do dólar
@@ -114,11 +99,28 @@ def load_data(dolar_value):
     # Converter 'Data Pagamento' para datetime
     df['Data Pagamento'] = pd.to_datetime(df['Data Pagamento'], errors='coerce')
 
+    return df
 
-    return df, df_hist
+@st.cache_data(show_spinner=False)
+def load_hedge_data():
+    try:
+        df_hedge = pd.read_excel("vendas_cafe_em_reais.xlsx", sheet_name="hedge")
+        return df_hedge
+    except Exception as e:
+        return pd.DataFrame()
+
+@st.cache_data(show_spinner=False)
+def load_futures_data():
+    try:
+        df_futuros = pd.read_excel("vendas_cafe_em_reais.xlsx", sheet_name="futuros")
+        return df_futuros
+    except Exception as e:
+        return pd.DataFrame()
+
+
 
 # Passar a cotação do dólar como parâmetro para a função load_data
-df, df_hist = load_data(cotacao_dolar)
+df = load_data(cotacao_dolar)
 
 # Definir paletas de cores consistentes para todas as categorias
 peneiras = sorted(list(df['Peneira'].astype(str).unique()))
@@ -144,15 +146,13 @@ st.sidebar.title("Filtros")
 
 safras = st.sidebar.multiselect("Safras",
                                 options=sorted(df['Safra'].unique()),
-                                default=[2024, 2025])
+                                default=[2025])
 
-incluir_estimativas = st.sidebar.checkbox("📈 Incluir Estoque", value=False)
-
+incluir_estimativas = st.sidebar.checkbox("📈 Incluir Estoque", value=True)
 
 mercado = st.sidebar.multiselect("Mercado",
                                  options=sorted(df['Mercado'].unique()),
                                  default=sorted(df['Mercado'].unique()))
-
 
 clientes = st.sidebar.multiselect("Clientes",
                                   options=sorted(df['Cliente'].unique()),
@@ -222,7 +222,6 @@ def display_metrics(data):
         avg_price = total_revenue / total_sacas if total_sacas > 0 else 0
         st.metric("Valor médio da saca", f"R$ {avg_price:.2f}/sc")
 
-
 def create_volume_chart(data, dimension):
     # Garantir que usamos o COLOR_MAP global para consistência de cores
     volume_data = data.groupby(dimension)['# Sacas'].sum().sort_values(ascending=True).reset_index()
@@ -238,7 +237,6 @@ def create_volume_chart(data, dimension):
 
     fig.update_layout(showlegend=False)
     return fig
-
 
 def create_price_chart(data, dimension):
     # Garantir que usamos o COLOR_MAP global para consistência de cores
@@ -264,7 +262,6 @@ def create_price_chart(data, dimension):
     fig.update_layout(showlegend=False)
     return fig
 
-
 def create_revenue_chart(data, dimension):
     # Garantir que usamos o COLOR_MAP global para consistência de cores
     revenue_data = data.groupby(dimension)['Receita R$'].sum().sort_values(ascending=True).reset_index()
@@ -280,7 +277,6 @@ def create_revenue_chart(data, dimension):
 
     fig.update_layout(showlegend=False)
     return fig
-
 
 def create_pie_chart(data, dimension):
     # Garantir que usamos o COLOR_MAP global para consistência de cores
@@ -303,7 +299,6 @@ def create_pie_chart(data, dimension):
 
     fig.update_traces(textposition='inside', textinfo='percent')
     return fig
-
 
 def create_market_comparison(data):
     # Verificar se há dados suficientes
@@ -391,160 +386,185 @@ def create_market_comparison(data):
 
     return fig
 
+def calculate_hedge_results(df_hedge, cotacao_dolar):
+    if df_hedge.empty:
+        return df_hedge
 
-def create_temporal_analysis(data, historico):
-    # Verificar se temos dados de pagamento e preço:
-    if data.empty or data["Data Pagamento"].isna().all() or historico.empty:
-        fig = go.Figure()
-        fig.update_layout(
-            title="Sem dados suficientes para análise temporal",
-            annotations=[dict(
-                text="Não há dados de pagamento ou histórico para os filtros selecionados",
-                showarrow=False,
-                xref="paper",
-                yref="paper",
-                x=0.5,
-                y=0.5,
-                font=dict(size=16)
-            )]
-        )
-        return fig
+    df_result = df_hedge.copy()
 
+    # Criar coluna de resultado se não existir
+    if 'Resultado Calculado R$' not in df_result.columns:
+        df_result['Resultado Calculado R$'] = 0.0
+
+    # Para operações LIQUIDADAS - usar coluna 'Resultado R$' se existir
+    if 'Status' in df_result.columns and 'Resultado R$' in df_result.columns:
+        mask_liquidado = df_result['Status'] == 'Liquidado'
+        df_result.loc[mask_liquidado, 'Resultado Calculado R$'] = df_result.loc[mask_liquidado, 'Resultado R$']
+
+    # Para operações Não Liquidadas - calcular com cotação atual
+    if 'Status' in df_result.columns:
+        mask_ativo = df_result['Status'] != 'Liquidado'
+
+        # Verificar se tem as colunas necessárias para cálculo
+        if all(col in df_result.columns for col in ['Preço (cts/lb)', 'Liq. (cts/lb)', '# Sacas']):
+            # Cálculo: (Liq - Preço) * Sacas * Dólar / 100
+            df_result.loc[mask_ativo, 'Resultado Calculado R$'] = (
+                    (df_result.loc[mask_ativo, 'Preço (cts/lb)']-df_result.loc[mask_ativo, 'Liq. (cts/lb)']) *
+                    df_result.loc[mask_ativo, '# Sacas'] * cotacao_dolar * 1.3228
+            )
+
+    return df_result
+
+def create_hedge_chart(df_hedge, df_futuros):
     fig = go.Figure()
 
-    # Verificar qual coluna usar para o preço médio histórico
-    price_column = None
-    if 'Preco_medio' in historico.columns:
-        price_column = 'Preco_medio'
-    elif 'Saca (R$)' in historico.columns:
-        price_column = 'Saca (R$)'
+    # === LINHA AZUL: Contratos Futuros ===
+    if not df_futuros.empty:
+        try:
+            # Ver o que realmente tem na coluna
+            print(df_futuros['Data'].head(10))
+            print(df_futuros['Data'].dtype)
 
-    # Garantir que a Data existe e está em formato datetime
-    if 'Data' in historico.columns and price_column and not historico.empty:
-        # Certificar que a Data está em formato datetime
-        if not pd.api.types.is_datetime64_any_dtype(historico['Data']):
-            historico['Data'] = pd.to_datetime(historico['Data'], errors='coerce')
+            df_futuros_clean = df_futuros.copy()
+            df_futuros_clean['Data'] = pd.to_datetime(
+                df_futuros_clean['Data'],
+                infer_datetime_format=True,  # Deixa o pandas tentar identificar
+                errors='coerce'
+            )
 
-        # Ordenar os dados históricos por data
-        historico_sorted = historico.sort_values('Data')
+            df_futuros_clean = df_futuros_clean.dropna(subset=['Data', 'KC=F'])
 
-        # Verificar se existem valores NaN e remover ou preencher conforme necessário
-        historico_sorted = historico_sorted.dropna(subset=['Data', price_column])
-
-        # Verificar se ainda temos dados após a limpeza
-        if not historico_sorted.empty:
-            # Adicionar a linha de média histórica
             fig.add_trace(go.Scatter(
-                x=historico_sorted['Data'],
-                y=historico_sorted[price_column],
+                x=df_futuros_clean['Data'],
+                y=df_futuros_clean['KC=F'],
                 mode='lines',
-                name='NY * Dólar',
-                line=dict(color='rgba(31, 119, 180, 0.8)', width=2),
-                hovertemplate='Data: %{x|%d/%m/%Y}<br>Preço Médio: R$ %{y:.2f}/sc<extra></extra>'
+                name='Futuros NY',
+                line=dict(color='gray', width=4),
+                hoverinfo='x+y'
             ))
 
-        # Filtrar apenas os dados com data de pagamento
-        data_com_data = data.dropna(subset=['Data Pagamento'])
 
-        if not data_com_data.empty:
-            # Certificar que a Data Pagamento está em formato datetime
-            if not pd.api.types.is_datetime64_any_dtype(data_com_data['Data Pagamento']):
-                data_com_data['Data Pagamento'] = pd.to_datetime(data_com_data['Data Pagamento'], errors='coerce')
+        except Exception as e:
+            st.warning(f"Erro ao processar futuros: {e}")
 
-            # Remover linhas onde Data Pagamento for NaT após a conversão
-            data_com_data = data_com_data.dropna(subset=['Data Pagamento'])
+    # === PONTOS DOS CONTRATOS DE HEDGE ===
+    if not df_hedge.empty and 'Preço (cts/lb)' in df_hedge.columns:
+        try:
+            # Verificar se tem resultado calculado
+            if 'Resultado Calculado R$' not in df_hedge.columns:
+                # Se não tem resultado, mostrar pontos neutros
+                colors = ['gray'] * len(df_hedge)
+            else:
+                # Cores baseadas no resultado
+                colors = []
+                for resultado in df_hedge['Resultado Calculado R$']:
+                    if pd.isna(resultado) or resultado == 0:
+                        colors.append('gray')
+                    elif resultado >= 0:
+                        colors.append('green')
+                    else:
+                        colors.append('red')
 
-            if not data_com_data.empty:
-                # Para cada contrato, criar um ponto no scatter
-                scatter_data = data_com_data.copy()
+            # Tamanhos baseados nas sacas
+            sizes = [25] * len(df_hedge)  # Tamanho padrão
+            if '# Sacas' in df_hedge.columns:
+                sacas = pd.to_numeric(df_hedge['# Sacas'], errors='coerce').fillna(0)
+                if sacas.max() > sacas.min():
+                    sizes = [15 + 35 * (x - sacas.min()) / (sacas.max() - sacas.min()) for x in sacas]
 
-                # Usar a coluna 'Código' existente, ou criar um ID temporário se não existir
-                if 'Código' not in scatter_data.columns:
-                    scatter_data['codigo_display'] = scatter_data.index.astype(str)
-                else:
-                    scatter_data['codigo_display'] = scatter_data['Código']
+            # Determinar valores do eixo X para os hedge
+            x_values = None
+            possible_x_cols = ['Vencimento', 'Data Liq.', 'Data', 'Código']
 
-                # Calcular preço médio para cada contrato
-                scatter_data['preco_medio_contrato'] = scatter_data['Preço (R$/sc)']
+            for col in possible_x_cols:
+                if col in df_hedge.columns:
+                    x_values = df_hedge[col]
+                    # Se for data, tentar converter
+                    if 'Data' in col or 'Vencimento' in col:
+                        try:
+                            x_values = pd.to_datetime(x_values, errors='coerce')
+                        except:
+                            pass
+                    break
 
-                # Verificar se os valores são numéricos
-                if not pd.api.types.is_numeric_dtype(scatter_data['preco_medio_contrato']):
-                    # Tentar converter para numérico
-                    scatter_data['preco_medio_contrato'] = pd.to_numeric(
-                        scatter_data['preco_medio_contrato'], errors='coerce')
+            if x_values is None:
+                x_values = df_hedge.index
 
-                # Remover linhas com preços não numéricos
-                scatter_data = scatter_data.dropna(subset=['preco_medio_contrato'])
+            # Criar hover text detalhado
+            hover_texts = []
+            for _, row in df_hedge.iterrows():
+                texto = f"<b>Contrato Hedge</b><br>"
 
-                if not scatter_data.empty:
-                    # Criar o texto para hover incluindo a qualidade
-                    scatter_data['hover_text'] = scatter_data.apply(
-                        lambda row: f"Código: {row['codigo_display']}<br>" +
-                                    f"Cliente: {row['Cliente']}<br>" +
-                                    f"Qualidade: {row.get('Qualidade', 'N/A')}<br>" +
-                                    f"Diferencial: {row.get('Diferencial'):.0f}<br>" +
-                                    f"Sacas: {int(row['# Sacas']):,}<br>" +
-                                    f"Valor Médio: R$ {row['preco_medio_contrato']:.2f}/sc",
-                        axis=1
-                    )
+                if 'Cliente' in row and pd.notna(row['Cliente']):
+                    texto += f"<b>Cliente:</b> {row['Cliente']}<br>"
 
-                    # Calcular tamanho dos pontos (proporcional ao número de sacas)
-                    # Garantir que '# Sacas' seja numérico
-                    if not pd.api.types.is_numeric_dtype(scatter_data['# Sacas']):
-                        scatter_data['# Sacas'] = pd.to_numeric(scatter_data['# Sacas'], errors='coerce')
-                        scatter_data = scatter_data.dropna(subset=['# Sacas'])
+                if '# Sacas' in row and pd.notna(row['# Sacas']):
+                    texto += f"<b># Sacas:</b> {row['# Sacas']:,.0f}<br>"
 
-                    if not scatter_data.empty:
-                        min_size = 5  # Tamanho mínimo
-                        max_size = scatter_data['# Sacas'].max()
+                if 'Preço (cts/lb)' in row and pd.notna(row['Preço (cts/lb)']):
+                    texto += f"<b>Preço:</b> {row['Preço (cts/lb)']:.2f} cts/lb<br>"
 
-                        # Evitar divisão por zero se todas as sacas tiverem o mesmo valor
-                        if max_size > 0:
-                            scatter_data['marker_size'] = (scatter_data['# Sacas'] / max_size * 30) + min_size
-                        else:
-                            scatter_data['marker_size'] = min_size
+                if 'Liq. (cts/lb)' in row and pd.notna(row['Liq. (cts/lb)']):
+                    texto += f"<b>Liquidação:</b> {row['Liq. (cts/lb)']:.2f} cts/lb<br>"
 
-                        # Adicionar scatter para os contratos
-                        fig.add_trace(go.Scatter(
-                            x=scatter_data['Data Pagamento'],
-                            y=scatter_data['preco_medio_contrato'],
-                            mode='markers',
-                            name='Contratos',
-                            marker=dict(
-                                size=scatter_data['marker_size'],
-                                color=scatter_data['# Sacas'],
-                                colorscale='Viridis',
-                                opacity=0.7,
-                                colorbar=dict(title="Sacas"),
-                                line=dict(width=1, color='DarkSlateGrey')
-                            ),
-                            text=scatter_data['hover_text'],
-                            hoverinfo='text'
-                        ))
+                if 'Vencimento' in row and pd.notna(row['Vencimento']):
+                    try:
+                        venc_formatado = pd.to_datetime(row['Vencimento']).strftime('%d/%m/%Y')
+                        texto += f"<b>Vencimento:</b> {venc_formatado}<br>"
+                    except:
+                        texto += f"<b>Vencimento:</b> {row['Vencimento']}<br>"
 
-        # Configurar o layout
-        fig.update_layout(
-            title='Análise Temporal de Preços',
-            xaxis_title='Data',
-            yaxis_title='Preço Médio (R$/sc)',
-            hovermode='closest',
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            margin=dict(l=10, r=10, t=40, b=10),
-            height=600
+                if 'Resultado Calculado R$' in row and pd.notna(row['Resultado Calculado R$']):
+                    texto += f"<b>Resultado:</b> R$ {row['Resultado Calculado R$']:,.0f}"
+
+                hover_texts.append(texto)
+
+            # Adicionar os pontos dos contratos hedge
+            fig.add_trace(go.Scatter(
+                x=x_values,
+                y=df_hedge['Preço (cts/lb)'],
+                mode='markers',
+                name='Contratos Hedge',
+                marker=dict(
+                    color=colors,
+                    size=sizes,
+                    opacity=0.8,
+                    line=dict(width=2, color='white')
+                ),
+                text=hover_texts,
+                hovertemplate='%{text}<extra></extra>'
+            ))
+
+        except Exception as e:
+            st.warning(f"Aviso: Problema ao processar contratos hedge: {e}")
+
+    # === CONFIGURAÇÕES DO LAYOUT ===
+    fig.update_layout(
+        title="Futuros vs Hedge",
+        xaxis_title="Período",
+        yaxis_title="Preço (cts/lb)",
+        height=500,
+        hovermode='closest',
+        showlegend=True,
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01
         )
+    )
 
-        return fig
+    return fig
 
 
-tab1, tab4, tab5, tab7 = st.tabs([
+tab1, tab4, tab5, tab7, tab6 = st.tabs([
     '📊 Consolidado',
     #'👥 Por Cliente',
     #'📏 Por Peneira',
     '✨ Por Qualidade',
     '🌍 Exportação vs Mercado Interno',
     '💰 CashFlow',
-    #'📅 Análise Temporal',
-
+    '🔄 Hedge',
 ])
 
 with tab1:
@@ -649,184 +669,135 @@ with tab5:
         st.warning(
             "Não há dados suficientes para exibir a comparação.")
 
-#with tab6:
-    st.markdown("### Análise Temporal de Preços")
+with tab6:
+    st.markdown("### Hedge")
 
-    display_metrics(df_filtered)
+    # Carregar dados da planilha hedge
+    df_hedge_raw = load_hedge_data()
+    df_futuros_raw = load_futures_data()
 
-    # Determinar qual coluna usar para o preço médio histórico
-    price_column = None
-    if not df_hist.empty:
-        if 'Preco_medio' in df_hist.columns:
-            price_column = 'Preco_medio'
-        elif 'Saca (R$)' in df_hist.columns:
-            price_column = 'Saca (R$)'
+    if df_hedge_raw.empty:
+        st.warning("⚠️ Não foi possível carregar dados da aba 'hedge'")
 
-    # Verificar se temos dados suficientes
-    has_temporal_data = (
-            not df_filtered.empty and
-            df_filtered['Data Pagamento'].notna().any() and
-            not df_hist.empty and
-            'Data' in df_hist.columns and
-            price_column is not None
-    )
-
-    if has_temporal_data:
-        # Certificar que as datas estão em formato datetime
-        if not pd.api.types.is_datetime64_any_dtype(df_hist['Data']):
-            df_hist['Data'] = pd.to_datetime(df_hist['Data'], errors='coerce')
-
-        if not pd.api.types.is_datetime64_any_dtype(df_filtered['Data Pagamento']):
-            df_filtered['Data Pagamento'] = pd.to_datetime(df_filtered['Data Pagamento'], errors='coerce')
-
-        # Remover valores NaT
-        df_hist_clean = df_hist.dropna(subset=['Data'])
-        df_filtered_clean = df_filtered.dropna(subset=['Data Pagamento'])
-
-        # Calcular data mínima para a visualização (3 meses antes do primeiro pagamento)
-        first_payment_date = df_filtered_clean['Data Pagamento'].min() if not df_filtered_clean.empty else None
-
-        if first_payment_date:
-            # Calcular data 3 meses antes do primeiro pagamento
-            first_date_minus_3months = (first_payment_date - pd.DateOffset(months=3)).date()
-            # Garantir que a data mínima não seja anterior ao primeiro dado histórico
-            hist_min_date = df_hist_clean['Data'].min().date() if not df_hist_clean.empty else None
-            if hist_min_date:
-                # Usar a data mais recente entre o histórico mínimo e 3 meses antes do primeiro pagamento
-                min_date = max(hist_min_date, first_date_minus_3months)
-            else:
-                min_date = first_date_minus_3months
-        else:
-            # Se não houver pagamentos, usar o mínimo histórico
-            min_date = df_hist_clean['Data'].min().date() if not df_hist_clean.empty else None
-
-        max_date = df_hist_clean['Data'].max().date() if not df_hist_clean.empty else None
-
-        # Criar o slider para seleção de período apenas se tivermos datas válidas
-        if min_date and max_date:
-            # Verificar se min_date não é maior que max_date
-            if min_date <= max_date:
-                date_range = st.slider(
-                    "Selecione o período para visualização da análise temporal",
-                    min_value=min_date,
-                    max_value=max_date,
-                    value=(min_date, max_date),
-                    format="MMM/YY"
-                )
-
-                # Obter as datas do slider
-                start_date, end_date = date_range
-
-                # Filtrar dados históricos pelo período selecionado
-                filtered_hist = df_hist_clean.copy()
-                filtered_hist = filtered_hist[
-                    (filtered_hist['Data'].dt.date >= start_date) &
-                    (filtered_hist['Data'].dt.date <= end_date)
-                    ]
-
-                # Exibir gráfico apenas se existirem dados no período
-                if not filtered_hist.empty:
-                    # Exibir o gráfico de análise temporal
-                    temporal_chart = create_temporal_analysis(df_filtered_clean, filtered_hist)
-                    st.plotly_chart(temporal_chart, use_container_width=True)
-
-                    # Adicionar estatísticas complementares
-                    st.markdown("### Estatísticas do Período Selecionado")
-
-                    # Calcular estatísticas dos dados históricos (removendo mediana e desvio padrão)
-                    if price_column in filtered_hist.columns:
-                        hist_stats = {
-                            'Média': filtered_hist[price_column].mean(),
-                            'Mínimo': filtered_hist[price_column].min(),
-                            'Máximo': filtered_hist[price_column].max()
-                        }
-
-                        # Filtrar contratos do período selecionado
-                        contratos_periodo = df_filtered_clean[
-                            (df_filtered_clean['Data Pagamento'].dt.date >= start_date) &
-                            (df_filtered_clean['Data Pagamento'].dt.date <= end_date)
-                            ]
-
-                        if not contratos_periodo.empty:
-                            # Verificar se Preço (R$/sc) é numérico
-                            if not pd.api.types.is_numeric_dtype(contratos_periodo['Preço (R$/sc)']):
-                                contratos_periodo['Preço (R$/sc)'] = pd.to_numeric(
-                                    contratos_periodo['Preço (R$/sc)'], errors='coerce')
-
-                            # Ignorar valores não numéricos
-                            contratos_periodo = contratos_periodo.dropna(subset=['Preço (R$/sc)'])
-
-                            if not contratos_periodo.empty:
-                                contratos_stats = {
-                                    'Média': contratos_periodo['Preço (R$/sc)'].mean(),
-                                    'Mínimo': contratos_periodo['Preço (R$/sc)'].min(),
-                                    'Máximo': contratos_periodo['Preço (R$/sc)'].max(),
-                                    'Total de Contratos': len(contratos_periodo),
-                                    'Total de Sacas': contratos_periodo['# Sacas'].sum()
-                                }
-
-                                # Exibir estatísticas em colunas
-                                col1, col2 = st.columns(2)
-
-                                with col1:
-                                    st.markdown("#### Dados históricos")
-                                    for label, value in hist_stats.items():
-                                        if label in ['Média', 'Mínimo', 'Máximo']:
-                                            st.metric(label, f"R$ {value:.2f}/sc")
-
-                                with col2:
-                                    st.markdown("#### Contratos no período")
-                                    for label, value in contratos_stats.items():
-                                        if label in ['Média', 'Mínimo', 'Máximo']:
-                                            st.metric(label, f"R$ {value:.2f}/sc")
-                                        elif label == 'Total de Sacas':
-                                            st.metric(label, f"{int(value):,}")
-                                        elif label == 'Total de Contratos':
-                                            st.metric(label, f"{int(value)}")
-
-                                # Exibir tabela de contratos
-                                if st.checkbox("Exibir tabela de contratos"):
-                                    # Selecionar e formatar colunas relevantes
-                                    contratos_table = contratos_periodo[[
-                                        'Cliente', 'Data Pagamento', '# Sacas', 'Preço (R$/sc)', 'Receita R$', 'tipo'
-                                    ]].copy()
-
-                                    # Ordenar por data
-                                    contratos_table = contratos_table.sort_values('Data Pagamento')
-
-                                    # Formatar colunas numéricas
-                                    contratos_table['# Sacas'] = contratos_table['# Sacas'].apply(
-                                        lambda x: f"{int(x):,}")
-                                    contratos_table['Preço (R$/sc)'] = contratos_table['Preço (R$/sc)'].apply(
-                                        lambda x: f"R$ {x:.2f}")
-                                    contratos_table['Receita R$'] = contratos_table['Receita R$'].apply(
-                                        lambda x: f"R$ {x:,.2f}")
-
-                                    # Renomear colunas para melhor visualização
-                                    contratos_table.columns = [
-                                        'Cliente', 'Data Pagamento', 'Sacas', 'Valor/Saca', 'Receita Total', 'Tipo'
-                                    ]
-
-                                    # Exibir tabela
-                                    st.dataframe(contratos_table, use_container_width=True)
-                        else:
-                            st.warning("Não há contratos no período selecionado.")
-                else:
-                    st.warning(
-                        "Não há dados históricos disponíveis para o período selecionado."
-                    )
-            else:
-                st.warning(
-                    "Problema com as datas: a data mínima é maior que a data máxima."
-                )
-        else:
-            st.warning(
-                "Não foi possível determinar o período de análise devido a problemas com as datas."
-            )
     else:
-        st.warning(
-            "Não há dados suficientes para exibir a análise temporal. Verifique se existem dados históricos e contratos com datas de pagamento."
-        )
+        # Calcular resultados
+        df_hedge_processed = calculate_hedge_results(df_hedge_raw, cotacao_dolar)
+
+        # === FILTRO SIMPLES ===
+        st.markdown("#### 🔍 Filtros")
+
+        if 'Status' in df_hedge_processed.columns:
+            status_selected = st.selectbox(
+                "Status dos Contratos",
+                options=['Todos', 'Financeiro', 'Físico'],
+                index=1,
+                key="hedge_status_simple"
+            )
+
+            if status_selected == 'Todos':
+                df_hedge_filtered = df_hedge_processed
+            else:
+                df_hedge_filtered = df_hedge_processed[df_hedge_processed['Status'] == status_selected]
+        else:
+            df_hedge_filtered = df_hedge_processed
+
+        # === MÉTRICAS CORRIGIDAS ===
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            # Contratos ativos baseado no filtro
+            if 'Status' in df_hedge_filtered.columns:
+                if status_selected == 'Financeiro':
+                    ativos = len(df_hedge_filtered[df_hedge_filtered['Status'] == 'Financeiro'])
+                elif status_selected == 'Liquidado':
+                    ativos = len(df_hedge_filtered[df_hedge_filtered['Status'] == 'Liquidado'])
+                elif status_selected == 'Físico':
+                    ativos = len(df_hedge_filtered[df_hedge_filtered['Status'] == 'Físico'])
+                else:  # Todos
+                    ativos = len(df_hedge_filtered['Status'])
+            else:
+                ativos = len(df_hedge_filtered)
+            st.metric("Contratos", ativos)
+
+        with col2:
+            # Total de sacas baseado no filtro selecionado
+            if '# Sacas' in df_hedge_filtered.columns:
+                if status_selected == 'Financeiro':
+                    total_sacas = int(df_hedge_filtered['# Sacas'].sum()) if not df_hedge_filtered.empty else 0
+                elif status_selected == 'Liquidado':
+                    total_sacas = int(df_hedge_filtered['# Sacas'].sum()) if not df_hedge_filtered.empty else 0
+                elif status_selected == 'Físico':
+                    total_sacas = int(df_hedge_filtered['# Sacas'].sum()) if not df_hedge_filtered.empty else 0
+                else:
+                    total_sacas = int(df_hedge_processed['# Sacas'].sum()) if not df_hedge_processed.empty else 0
+                st.metric("Total de Sacas", f"{total_sacas:,}")
+            else:
+                st.metric("Total de Sacas", "N/A")
+
+        with col3:
+            # Resultado baseado no filtro
+            if 'Resultado Calculado R$' in df_hedge_filtered.columns:
+                resultado = df_hedge_filtered['Resultado Calculado R$'].sum()
+                st.metric("Resultado", f"R$ {resultado:,.0f}")
+            else:
+                st.metric("Resultado", "N/A")
+
+        # === GRÁFICO ===
+        st.markdown("#### 📈 Comparação: Futuros vs Hedge")
+        try:
+            fig = create_hedge_chart(df_hedge_filtered, df_futuros_raw)
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Erro ao criar gráfico: {e}")
+
+        # === TABELA ===
+        st.markdown("#### 📋 Detalhes dos Contratos")
+
+        if not df_hedge_filtered.empty:
+            # Selecionar colunas para exibir
+            display_cols = []
+            possible_cols = ['Cliente', 'Status', 'Código', '# Sacas', 'Preço (cts/lb)', 'Liq. (cts/lb)', 'Vencimento', 'Data Liq.']
+
+            for col in possible_cols:
+                if col in df_hedge_filtered.columns:
+                    display_cols.append(col)
+
+            if 'Resultado Calculado R$' in df_hedge_filtered.columns:
+                display_cols.append('Resultado Calculado R$')
+
+            # Mostrar info de debug
+            st.info(f"Debug: Mostrando {len(df_hedge_filtered)} contratos com filtro '{status_selected}'")
+
+            if display_cols:
+                df_display = df_hedge_filtered[display_cols].copy()
+
+                if 'Vencimento' in df_display.columns:
+                    df_display['Vencimento'] = pd.to_datetime(df_display['Vencimento'], errors='coerce').dt.strftime(
+                        '%d/%m/%Y')
+                if 'Data Liq.' in df_display.columns:
+                    df_display['Data Liq.'] = pd.to_datetime(df_display['Data Liq.'], errors='coerce').dt.strftime(
+                        '%d/%m/%Y')
+
+                # Dicionário de formatação para números
+                format_dict = {}
+                if 'Resultado Calculado R$' in display_cols:
+                    format_dict['Resultado Calculado R$'] = 'R$ {:,.0f}'
+                if '# Sacas' in display_cols:
+                    format_dict['# Sacas'] = '{:,.0f}'
+                if 'Preço (cts/lb)' in display_cols:
+                    format_dict['Preço (cts/lb)'] = '{:.2f}'
+                if 'Liq. (cts/lb)' in display_cols:
+                    format_dict['Liq. (cts/lb)'] = '{:.2f}'
+
+                st.dataframe(
+                    df_display.style.format(format_dict),
+                    use_container_width=True
+                )
+
+            else:
+                st.dataframe(df_hedge_filtered, use_container_width=True)
+        else:
+            st.info("📝 Nenhum contrato encontrado com os filtros selecionados")
 
 with tab7:
     st.markdown("### Fluxo de Caixa")
