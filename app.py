@@ -689,8 +689,8 @@ with tab6:
         if 'Status' in df_hedge_processed.columns:
             status_selected = st.selectbox(
                 "Status dos Contratos",
-                options=['Todos', 'Financeiro', 'Físico'],
-                index=1,
+                options=['Todos', 'Liquidado', 'Financeiro', 'Físico'],
+                index=2,
                 key="hedge_status_simple"
             )
 
