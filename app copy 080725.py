@@ -420,6 +420,10 @@ def create_hedge_chart(df_hedge, df_futuros):
     # === LINHA AZUL: Contratos Futuros ===
     if not df_futuros.empty:
         try:
+            # Ver o que realmente tem na coluna
+            print(df_futuros['Data'].head(10))
+            print(df_futuros['Data'].dtype)
+
             df_futuros_clean = df_futuros.copy()
             df_futuros_clean['Data'] = pd.to_datetime(
                 df_futuros_clean['Data'],
