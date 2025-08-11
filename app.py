@@ -552,6 +552,7 @@ def create_hedge_chart(df_hedge, df_futuros):
     return fig
 
 
+
 tab1, tab4, tab5, tab7, tab6 = st.tabs([
     '📊 Consolidado',
     #'👥 Por Cliente',
@@ -751,7 +752,7 @@ with tab6:
         if not df_hedge_filtered.empty:
             # Selecionar colunas para exibir
             display_cols = []
-            possible_cols = ['Cliente', 'Status', 'Código', '# Sacas', 'Preço (cts/lb)', 'Liq. (cts/lb)', 'Vencimento', 'Data Liq.']
+            possible_cols = ['Cliente', 'Status', 'Código', 'Contratos', '# Sacas', 'Preço (cts/lb)', 'Liq. (cts/lb)', 'Vencimento', 'Data Liq.']
 
             for col in possible_cols:
                 if col in df_hedge_filtered.columns:
@@ -779,6 +780,8 @@ with tab6:
                     format_dict['Resultado Calculado R$'] = 'R$ {:,.0f}'
                 if '# Sacas' in display_cols:
                     format_dict['# Sacas'] = '{:,.0f}'
+                if 'Contratos' in display_cols:
+                    format_dict['Contratos'] = '{:,.1f}'
                 if 'Preço (cts/lb)' in display_cols:
                     format_dict['Preço (cts/lb)'] = '{:.2f}'
                 if 'Liq. (cts/lb)' in display_cols:
