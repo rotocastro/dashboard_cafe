@@ -191,9 +191,6 @@ if selected_clients_in_info:
                             - ⭐ **Credit Score:** {fin_data['Credit Score']}
                         """)
 
-# peneiras = st.sidebar.multiselect("Peneiras",
-#                                   options=sorted([str(p) for p in df['peneira'].unique() if pd.notna(p)]),
-#                                   default=sorted([str(p) for p in df['peneira'].unique() if pd.notna(p)]))
 
 qualidades = st.sidebar.multiselect("Qualidade",
                                     options=sorted([str(p) for p in df['Qualidade'].unique() if pd.notna(p)]),
@@ -555,8 +552,6 @@ def create_hedge_chart(df_hedge, df_futuros):
 
 tab1, tab4, tab5, tab7, tab6 = st.tabs([
     '📊 Consolidado',
-    #'👥 Por Cliente',
-    #'📏 Por Peneira',
     '✨ Por Qualidade',
     '🌍 Exportação vs Mercado Interno',
     '💰 CashFlow',
@@ -578,33 +573,6 @@ with tab1:
     with col4:
         st.plotly_chart(create_price_chart(df_filtered, 'Cliente'), key="price_1", use_container_width=True)
 
-# with tab2:
-#     display_metrics(df_filtered)
-#     col1, col2 = st.columns(2)
-#     with col1:
-#         st.plotly_chart(create_volume_chart(df_filtered, 'Cliente'), key="vol_2", use_container_width=True)
-#     with col2:
-#         st.plotly_chart(create_pie_chart(df_filtered, 'Cliente'), key="pie_2", use_container_width=True)
-#
-#     col3, col4 = st.columns(2)
-#     with col3:
-#         st.plotly_chart(create_revenue_chart(df_filtered, 'Cliente'), key="rev_2", use_container_width=True)
-#     with col4:
-#         st.plotly_chart(create_price_chart(df_filtered, 'Cliente'), key="price_2", use_container_width=True)
-#
-# with tab3:
-#     display_metrics(df_filtered)
-#     col1, col2 = st.columns(2)
-#     with col1:
-#         st.plotly_chart(create_volume_chart(df_filtered, 'peneira'), key="vol_3", use_container_width=True)
-#     with col2:
-#         st.plotly_chart(create_pie_chart(df_filtered, 'peneira'), key="pie_3", use_container_width=True)
-#
-#     col3, col4 = st.columns(2)
-#     with col3:
-#         st.plotly_chart(create_revenue_chart(df_filtered, 'peneira'), key="rev_3", use_container_width=True)
-#     with col4:
-#         st.plotly_chart(create_price_chart(df_filtered, 'peneira'), key="price_3", use_container_width=True)
 
 with tab4:
     display_metrics(df_filtered)
@@ -760,9 +728,6 @@ with tab6:
 
             if 'Resultado Calculado R$' in df_hedge_filtered.columns:
                 display_cols.append('Resultado Calculado R$')
-
-            # Mostrar info de debug
-            st.info(f"Debug: Mostrando {len(df_hedge_filtered)} contratos com filtro '{status_selected}'")
 
             if display_cols:
                 df_display = df_hedge_filtered[display_cols].copy()
